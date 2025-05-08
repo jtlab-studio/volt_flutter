@@ -30,19 +30,19 @@ class MetricsGrid extends StatelessWidget {
     final averageCadence = currentActivity?.averageCadence;
     final averagePace = currentActivity?.averagePaceSecondsPerKm;
 
-    // MUCH SIMPLER AND MORE COMPACT LAYOUT
+    // ENHANCED LAYOUT WITH DEDICATED AVERAGE SPACES
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
       child: Column(
         children: [
-          // Primary metrics row (time and distance) - FIXED HEIGHT
+          // Primary metrics row (time and distance) - INCREASED HEIGHT
           SizedBox(
-            height: 60, // SIGNIFICANTLY REDUCED from 80
+            height: 70, // INCREASED from 60
             child: Row(
               children: [
                 // Duration
                 Expanded(
-                  child: _buildCompactMetric(
+                  child: _buildPrimaryMetric(
                     label: 'TIME',
                     value: TrackerService.formatDuration(duration),
                     icon: Icons.timer,
@@ -52,7 +52,7 @@ class MetricsGrid extends StatelessWidget {
                 const SizedBox(width: 8),
                 // Distance
                 Expanded(
-                  child: _buildCompactMetric(
+                  child: _buildPrimaryMetric(
                     label: 'DISTANCE',
                     value: '${TrackerService.formatDistance(distance)} km',
                     icon: Icons.straighten,
@@ -63,11 +63,11 @@ class MetricsGrid extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 4), // Minimal spacing
+          const SizedBox(height: 8), // Slightly increased spacing
 
-          // Secondary metrics - FIXED HEIGHT
+          // Secondary metrics - INCREASED HEIGHT with dedicated avg section
           SizedBox(
-            height: 120, // SIGNIFICANTLY REDUCED
+            height: 144, // INCREASED from 120 (20% increase)
             child: Row(
               children: [
                 // Left column - Pace and Power
@@ -76,7 +76,7 @@ class MetricsGrid extends StatelessWidget {
                     children: [
                       // Pace
                       Expanded(
-                        child: _buildCompactMetricWithAvg(
+                        child: _buildMetricWithDedicatedAvg(
                           label: 'PACE',
                           value: SensorReading.formatPace(pace),
                           avgValue: averagePace != null
@@ -87,10 +87,10 @@ class MetricsGrid extends StatelessWidget {
                           iconColor: Colors.orange,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 8),
                       // Power
                       Expanded(
-                        child: _buildCompactMetricWithAvg(
+                        child: _buildMetricWithDedicatedAvg(
                           label: 'POWER',
                           value: power?.toString() ?? '--',
                           avgValue: averagePower?.toString(),
@@ -109,7 +109,7 @@ class MetricsGrid extends StatelessWidget {
                     children: [
                       // Heart Rate
                       Expanded(
-                        child: _buildCompactMetricWithAvg(
+                        child: _buildMetricWithDedicatedAvg(
                           label: 'HEART RATE',
                           value: heartRate?.toString() ?? '--',
                           avgValue: averageHR?.toString(),
@@ -118,10 +118,10 @@ class MetricsGrid extends StatelessWidget {
                           iconColor: Colors.red,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 8),
                       // Cadence
                       Expanded(
-                        child: _buildCompactMetricWithAvg(
+                        child: _buildMetricWithDedicatedAvg(
                           label: 'CADENCE',
                           value: cadence?.toString() ?? '--',
                           avgValue: averageCadence?.toString(),
@@ -137,17 +137,17 @@ class MetricsGrid extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 4), // Minimal spacing
+          const SizedBox(height: 8), // Increased spacing
 
-          // Elevation - VERY COMPACT
+          // Elevation - SLIGHTLY INCREASED HEIGHT
           SizedBox(
-            height: 40, // MINIMAL HEIGHT
+            height: 48, // INCREASED from 40 (20% increase)
             child: Card(
               margin: EdgeInsets.zero,
               color: const Color(0xFF2C2C2C),
               child: Padding(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -155,7 +155,7 @@ class MetricsGrid extends StatelessWidget {
                     const Text(
                       'ELEVATION',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 12,
                         color: Colors.grey,
                         fontWeight: FontWeight.bold,
                       ),
@@ -165,42 +165,66 @@ class MetricsGrid extends StatelessWidget {
                     Row(
                       children: [
                         // Gain
-                        Row(
+                        Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(
-                              Icons.arrow_upward,
-                              color: Colors.green,
-                              size: 14,
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.arrow_upward,
+                                  color: Colors.green,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${elevationGain.toStringAsFixed(0)}m',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 2),
                             Text(
-                              '${elevationGain.toStringAsFixed(0)}m',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
+                              'GAIN',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey[400],
                               ),
                             ),
                           ],
                         ),
 
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 24),
 
                         // Loss
-                        Row(
+                        Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(
-                              Icons.arrow_downward,
-                              color: Colors.red,
-                              size: 14,
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.arrow_downward,
+                                  color: Colors.red,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${elevationLoss.toStringAsFixed(0)}m',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 2),
                             Text(
-                              '${elevationLoss.toStringAsFixed(0)}m',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
+                              'LOSS',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey[400],
                               ),
                             ),
                           ],
@@ -212,16 +236,13 @@ class MetricsGrid extends StatelessWidget {
               ),
             ),
           ),
-
-          // Spacer to push everything up
-          const Spacer(),
         ],
       ),
     );
   }
 
-  // Ultra compact time/distance metric
-  Widget _buildCompactMetric({
+  // Enhanced primary metric
+  Widget _buildPrimaryMetric({
     required String label,
     required String value,
     required IconData icon,
@@ -238,9 +259,9 @@ class MetricsGrid extends StatelessWidget {
             Icon(
               icon,
               color: iconColor,
-              size: 16,
+              size: 20, // Increased from 16
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12), // Increased from 8
             Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -250,14 +271,14 @@ class MetricsGrid extends StatelessWidget {
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize: 18,
+                    fontSize: 22, // Increased from 18
                   ),
                 ),
                 Text(
                   label,
                   style: TextStyle(
                     color: Colors.grey[400],
-                    fontSize: 10,
+                    fontSize: 12, // Increased from 10
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -269,8 +290,8 @@ class MetricsGrid extends StatelessWidget {
     );
   }
 
-  // Ultra compact metric with average value
-  Widget _buildCompactMetricWithAvg({
+  // Enhanced metric with dedicated average value section
+  Widget _buildMetricWithDedicatedAvg({
     required String label,
     required String value,
     String? avgValue,
@@ -286,14 +307,14 @@ class MetricsGrid extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Label and icon
+            // Label and icon row
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   label,
                   style: TextStyle(
-                    fontSize: 9,
+                    fontSize: 11, // Increased from 9
                     color: Colors.grey[400],
                     fontWeight: FontWeight.bold,
                   ),
@@ -301,13 +322,14 @@ class MetricsGrid extends StatelessWidget {
                 Icon(
                   icon,
                   color: iconColor,
-                  size: 12,
+                  size: 16, // Increased from 12
                 ),
               ],
             ),
 
-            // Value takes most space
+            // Current value takes most space
             Expanded(
+              flex: 3,
               child: Center(
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -317,7 +339,7 @@ class MetricsGrid extends StatelessWidget {
                     Text(
                       value,
                       style: const TextStyle(
-                        fontSize: 18,
+                        fontSize: 24, // Increased from 18
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                       ),
@@ -325,7 +347,7 @@ class MetricsGrid extends StatelessWidget {
                     Text(
                       ' $unit',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 12, // Increased from 10
                         color: Colors.grey[500],
                       ),
                     ),
@@ -334,19 +356,40 @@ class MetricsGrid extends StatelessWidget {
               ),
             ),
 
-            // Average if available
+            // DEDICATED AVERAGE SECTION
             if (avgValue != null)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'AVG: $avgValue',
-                    style: TextStyle(
-                      fontSize: 9,
-                      color: Colors.grey[400],
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: Colors.grey[800]!,
+                      width: 1,
                     ),
                   ),
-                ],
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      'AVERAGE',
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: Colors.grey[500],
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                    Text(
+                      '$avgValue $unit',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[300],
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
           ],
         ),

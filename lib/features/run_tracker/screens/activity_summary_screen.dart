@@ -19,6 +19,10 @@ class ActivitySummaryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Calculate optimal map dimensions
+    final screenHeight = MediaQuery.of(context).size.height;
+    final mapHeight = screenHeight * 0.25; // 25% of screen height for map
+
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
@@ -36,8 +40,8 @@ class ActivitySummaryScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Activity map
-            _buildActivityMap(),
+            // Activity map with better sizing and zooming
+            _buildActivityMap(context, mapHeight),
 
             // Activity name and date
             _buildActivityHeader(context),
@@ -50,19 +54,22 @@ class ActivitySummaryScreen extends StatelessWidget {
 
             // Action buttons
             _buildActionButtons(context),
+
+            // Space at bottom
+            SizedBox(height: MediaQuery.of(context).padding.bottom),
           ],
         ),
       ),
     );
   }
 
-  // Build activity map with route
-  Widget _buildActivityMap() {
+  // Build activity map with route - IMPROVED
+  Widget _buildActivityMap(BuildContext context, double height) {
     // Skip map if no route points
     if (activity.routePoints.isEmpty) {
       return Container(
         width: double.infinity,
-        height: 200,
+        height: height,
         color: Colors.grey[900],
         child: const Center(
           child: Text(
@@ -73,48 +80,92 @@ class ActivitySummaryScreen extends StatelessWidget {
       );
     }
 
+    // Calculate optimal zoom level based on route distance
+    double zoomLevel = 15.0; // Default zoom
+
+    if (activity.routePoints.length > 1) {
+      // Calculate bounds to fit all points
+      double minLat = activity.routePoints.first.latitude;
+      double maxLat = activity.routePoints.first.latitude;
+      double minLng = activity.routePoints.first.longitude;
+      double maxLng = activity.routePoints.first.longitude;
+
+      // Find min/max coordinates
+      for (final point in activity.routePoints) {
+        minLat = minLat < point.latitude ? minLat : point.latitude;
+        maxLat = maxLat > point.latitude ? maxLat : point.latitude;
+        minLng = minLng < point.longitude ? minLng : point.longitude;
+        maxLng = maxLng > point.longitude ? maxLng : point.longitude;
+      }
+
+      // Calculate diagonal distance in kilometers (approximate)
+      const double earthRadius = 6371.0; // in km
+      double dLat = (maxLat - minLat) * (3.14159 / 180.0);
+      double dLon = (maxLng - minLng) * (3.14159 / 180.0);
+      double lat1 = minLat * (3.14159 / 180.0);
+      double lat2 = maxLat * (3.14159 / 180.0);
+
+      double a = dLat * dLat + dLon * dLon * Math.cos(lat1) * Math.cos(lat2);
+      double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      double distance = earthRadius * c;
+
+      // Adjust zoom based on distance
+      if (distance < 0.5) {
+        zoomLevel = 16.0; // Very close, zoom in more
+      } else if (distance < 1.0) {
+        zoomLevel = 15.0;
+      } else if (distance < 3.0) {
+        zoomLevel = 14.0;
+      } else if (distance < 10.0) {
+        zoomLevel = 12.0;
+      } else {
+        zoomLevel = 10.0; // Far distance, zoom out
+      }
+    }
+
     return SizedBox(
       width: double.infinity,
-      height: 250,
-      child: FlutterMap(
-        options: MapOptions(
-          initialCenter: _calculateCenter(),
-          initialZoom: 14,
-          maxZoom: 18,
-          minZoom: 3,
-          interactionOptions: const InteractionOptions(
-            flags: InteractiveFlag.all,
-          ),
+      height: height,
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(
+          bottom: Radius.circular(12),
         ),
-        children: [
-          // Base map layer
-          TileLayer(
-            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            userAgentPackageName: 'com.example.volt_flutter',
-            subdomains: const ['a', 'b', 'c'],
+        child: FlutterMap(
+          options: MapOptions(
+            initialCenter: _calculateCenter(),
+            initialZoom: zoomLevel,
+            maxZoom: 18,
+            minZoom: 3,
           ),
+          children: [
+            // Base map layer
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.example.volt_flutter',
+            ),
 
-          // Route polyline
-          PolylineLayer(
-            polylines: [
-              Polyline(
-                points: activity.routePoints,
-                color: Colors.blue,
-                strokeWidth: 4.0,
-              ),
-            ],
-          ),
+            // Route polyline
+            PolylineLayer(
+              polylines: [
+                Polyline(
+                  points: activity.routePoints,
+                  color: Colors.blue,
+                  strokeWidth: 4.0,
+                ),
+              ],
+            ),
 
-          // Start and end markers
-          MarkerLayer(
-            markers: _buildRouteMarkers(),
-          ),
-        ],
+            // Start and end markers
+            MarkerLayer(
+              markers: _buildRouteMarkers(),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // Calculate center of route for map
+  // Calculate center of route for map - UNCHANGED
   LatLng _calculateCenter() {
     if (activity.routePoints.isEmpty) {
       return const LatLng(0, 0); // Default
@@ -130,7 +181,7 @@ class ActivitySummaryScreen extends StatelessWidget {
     return activity.routePoints.first;
   }
 
-  // Build markers for start and end points
+  // Build markers for start and end points - SLIGHTLY IMPROVED
   List<Marker> _buildRouteMarkers() {
     final markers = <Marker>[];
 
@@ -139,10 +190,18 @@ class ActivitySummaryScreen extends StatelessWidget {
       markers.add(
         Marker(
           point: activity.routePoints.first,
-          child: const Icon(
-            Icons.play_circle_fill,
-            color: Colors.green,
-            size: 24,
+          child: Container(
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.green, width: 2),
+            ),
+            child: const Icon(
+              Icons.play_arrow,
+              color: Colors.green,
+              size: 18,
+            ),
           ),
         ),
       );
@@ -152,10 +211,18 @@ class ActivitySummaryScreen extends StatelessWidget {
         markers.add(
           Marker(
             point: activity.routePoints.last,
-            child: const Icon(
-              Icons.stop_circle,
-              color: Colors.red,
-              size: 24,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.red, width: 2),
+              ),
+              child: const Icon(
+                Icons.stop,
+                color: Colors.red,
+                size: 18,
+              ),
             ),
           ),
         );
@@ -165,7 +232,7 @@ class ActivitySummaryScreen extends StatelessWidget {
     return markers;
   }
 
-  // Build activity header with name and date
+  // Build activity header with name and date - UNCHANGED
   Widget _buildActivityHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -191,7 +258,7 @@ class ActivitySummaryScreen extends StatelessWidget {
     );
   }
 
-  // Build key stats section (distance, time, pace, elevation)
+  // Build key stats section (distance, time, pace, elevation) - UNCHANGED
   Widget _buildKeyStats(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 16.0),
@@ -248,7 +315,7 @@ class ActivitySummaryScreen extends StatelessWidget {
     );
   }
 
-  // Build a single key stat item
+  // Build a single key stat item - UNCHANGED
   Widget _buildKeyStat({
     required BuildContext context,
     required String value,
@@ -284,7 +351,7 @@ class ActivitySummaryScreen extends StatelessWidget {
     );
   }
 
-  // Build detailed metrics section
+  // Build detailed metrics section - UNCHANGED
   Widget _buildDetailedMetrics(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 16.0),
@@ -372,7 +439,7 @@ class ActivitySummaryScreen extends StatelessWidget {
     );
   }
 
-  // Build a single metric row
+  // Build a single metric row - UNCHANGED
   Widget _buildMetricRow({
     required BuildContext context,
     required String label,
@@ -409,7 +476,7 @@ class ActivitySummaryScreen extends StatelessWidget {
     );
   }
 
-  // Build action buttons
+  // Build action buttons - UNCHANGED
   Widget _buildActionButtons(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -457,7 +524,7 @@ class ActivitySummaryScreen extends StatelessWidget {
     );
   }
 
-  // Format date as "Jan 1, 2025"
+  // Format date as "Jan 1, 2025" - UNCHANGED
   String _formatDate(DateTime date) {
     final months = [
       'Jan',
@@ -477,7 +544,7 @@ class ActivitySummaryScreen extends StatelessWidget {
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
-  // Format time as "10:30 AM"
+  // Format time as "10:30 AM" - UNCHANGED
   String _formatTime(DateTime date) {
     final hour = date.hour > 12 ? date.hour - 12 : date.hour;
     final hourStr = hour == 0 ? '12' : hour.toString();
@@ -487,7 +554,7 @@ class ActivitySummaryScreen extends StatelessWidget {
     return '$hourStr:$minute $period';
   }
 
-  // Share activity data
+  // Share activity data - UNCHANGED
   void _shareActivity() {
     // Format activity data as text
     final avgPace = SensorReading.formatPace(activity.averagePaceSecondsPerKm);
@@ -504,11 +571,16 @@ ${activity.averageHeartRate != null ? '- Avg HR: ${activity.averageHeartRate} bp
 Tracked with Volt Running Tracker
 ''';
 
-    // Use SharePlus.instance.share() - this is the correct method for the latest share_plus package
+    // Share the text
     SharePlus.instance.share(
       ShareParams(text: text),
     );
-    // Share the activity data using the share_plus package
-    // Share.share(text, subject: 'My Activity Summary');
   }
+}
+
+// Math helper for distance calculations
+class Math {
+  static double cos(double x) => dart.math.cos(x);
+  static double sqrt(double x) => dart.math.sqrt(x);
+  static double atan2(double y, double x) => dart.math.atan2(y, x);
 }

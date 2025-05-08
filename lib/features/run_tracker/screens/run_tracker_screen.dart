@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vibration/vibration.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../providers/tracker_providers.dart';
 import '../services/tracker_service.dart';
@@ -23,6 +25,9 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
   // Flag to show modal when initializing
   bool _isInitializing = true;
   bool _buttonPressed = false;
+
+  // Map controller to control zoom and centering
+  final MapController _mapController = MapController();
 
   @override
   void initState() {
@@ -216,6 +221,73 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
     );
   }
 
+  // Build the map section
+  Widget _buildMapSection() {
+    final currentActivity = ref.watch(currentActivityProvider);
+    final routePoints = currentActivity?.routePoints ?? [];
+
+    // Default center point if no GPS data
+    LatLng center =
+        const LatLng(37.7749, -122.4194); // Default to San Francisco
+
+    // If we have route points, center on the latest one
+    if (routePoints.isNotEmpty) {
+      center = routePoints.last;
+
+      // Update map view if needed - This ensures map stays centered on current location
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _mapController.move(center, 16);
+      });
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: FlutterMap(
+        mapController: _mapController,
+        options: MapOptions(
+          initialCenter: center,
+          initialZoom: 16.0, // Good zoom level for running
+          minZoom: 3.0,
+          maxZoom: 18.0,
+        ),
+        children: [
+          // Base map tiles
+          TileLayer(
+            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            userAgentPackageName: 'com.example.volt_running_tracker',
+          ),
+
+          // Route polyline
+          if (routePoints.isNotEmpty)
+            PolylineLayer(
+              polylines: [
+                Polyline(
+                  points: routePoints,
+                  color: Colors.blue,
+                  strokeWidth: 4.0,
+                ),
+              ],
+            ),
+
+          // Current position marker
+          if (routePoints.isNotEmpty)
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: routePoints.last,
+                  child: const Icon(
+                    Icons.my_location,
+                    color: Colors.red,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final trackerState = ref.watch(trackerStateProvider);
@@ -224,6 +296,24 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
     // FIXED: Properly detect if the timer has started
     final bool timerStarted =
         metrics['duration'] > 0 && trackerState == TrackerState.active;
+
+    // Calculate available height between app bar and bottom
+    final screenHeight = MediaQuery.of(context).size.height;
+    final appBarHeight = kToolbarHeight;
+    final bottomNavHeight = 70.0; // Activity controls height
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final sensorBarHeight = 40.0;
+
+    // Calculate space available for content
+    final availableHeight = screenHeight -
+        appBarHeight -
+        bottomNavHeight -
+        bottomPadding -
+        sensorBarHeight;
+
+    // Allocate ~60% to metrics grid, rest to map
+    final metricsGridHeight = availableHeight * 0.6;
+    final mapHeight = availableHeight * 0.4;
 
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
@@ -241,27 +331,39 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
       ),
       body: Stack(
         children: [
-          // Main content - SIMPLIFIED LAYOUT WITH FIXED HEIGHTS
+          // Main content - IMPROVED LAYOUT WITH MAP
           Column(
             children: [
-              // Sensor status bar - FIXED HEIGHT
+              // Sensor status bar
               const SizedBox(
-                height: 40, // REDUCED from 50
+                height: 40,
                 child: SensorStatusBar(),
               ),
 
-              // Metrics grid - CONSTRAINED HEIGHT
+              // Metrics grid - ~60% of available space
               SizedBox(
-                height: 240, // FIXED HEIGHT - this is critical
+                height: metricsGridHeight,
                 child: MetricsGrid(metrics: metrics),
               ),
 
-              // Push activity controls to the bottom
-              const Spacer(),
+              // Small spacer
+              const SizedBox(height: 8),
 
-              // Activity controls with fixed height
+              // Map section - ~40% of available space
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: SizedBox(
+                  height: mapHeight,
+                  child: _buildMapSection(),
+                ),
+              ),
+
+              // Small spacer
+              const SizedBox(height: 8),
+
+              // Activity controls at the bottom
               SizedBox(
-                height: 70, // REDUCED from 80
+                height: 70,
                 child: ActivityControls(
                   state: trackerState,
                   timerStarted: timerStarted,
