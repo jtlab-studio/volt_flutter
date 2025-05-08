@@ -1,19 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart' hide BluetoothService;
 import 'package:permission_handler/permission_handler.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:async'; // Add this import for StreamSubscription
-import 'dart:convert';
+import 'dart:async';
 
-// Define connection states for better UI feedback
-enum DeviceConnectionState {
-  disconnected,
-  connecting,
-  authenticating, // New state for MTU negotiation phase
-  connected,
-  failed
-}
+import 'bluetooth_models.dart';
+import 'bluetooth_service.dart';
 
 class SensorsScreen extends ConsumerStatefulWidget {
   const SensorsScreen({super.key});
@@ -22,68 +14,59 @@ class SensorsScreen extends ConsumerStatefulWidget {
   ConsumerState<SensorsScreen> createState() => _SensorsScreenState();
 }
 
-// Extended device info class to store additional data
-class ExtendedDeviceInfo {
-  final BluetoothDevice device;
-  final String cachedName;
-  final int lastConnected;
-
-  ExtendedDeviceInfo(
-      {required this.device,
-      required this.cachedName,
-      required this.lastConnected});
-}
-
-class _SensorsScreenState extends ConsumerState<SensorsScreen> {
+class _SensorsScreenState extends ConsumerState<SensorsScreen>
+    with WidgetsBindingObserver {
   // Bluetooth state
   bool _isScanning = false;
   bool _permissionGranted = false;
   List<BluetoothDevice> _connectedDevices = [];
   List<ScanResult> _scanResults = [];
   List<BluetoothDevice> _savedDevices = [];
+  StreamSubscription? _scanSubscription;
 
   // Track connection states for each device
   final Map<String, DeviceConnectionState> _deviceConnectionStates = {};
 
-  // Store subscriptions to properly cancel them
-  final Map<String, StreamSubscription> _connectionStateSubscriptions = {};
-  final Map<String, Completer<void>> _connectionCompleters = {};
-
   // Flag to prevent multiple simultaneous connections
   bool _isConnecting = false;
 
-  // Map to hold extended device info for better name display
-  final Map<String, String> _deviceCachedNames = {};
-
-  // Device-specific connection policies with optimized values
-  final Map<String, Map<String, dynamic>> _deviceConnectionPolicies = {
-    'HRMPro': {
-      'timeout': 12, // Reduced for speed
-      'mtu': 23, // Keep same value
-      'mtuTimeout': 1, // Keep same value
-      'retryDelay': 3, // Reduced for speed
-      'postConnectDelay': 1000, // Reduced for speed
-      'connectionAttempts': 2,
-      'skipSecondMtu': true,
-      'specialHandling': true,
-      'fastMode': true, // New flag for streamlined connection
-    },
-    'default': {
-      'timeout': 7, // Reduced from 10
-      'mtu': 132,
-      'mtuTimeout': 2, // Reduced from 4
-      'retryDelay': 1, // Reduced from 2
-      'postConnectDelay': 500, // Reduced from 800
-      'connectionAttempts': 2,
-      'skipSecondMtu': false,
-      'specialHandling': false,
-      'fastMode': false,
-    }
-  };
+  // Bluetooth service instance
+  late CustomBluetoothService _bluetoothService;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _initializeServices();
+  }
+
+  // Initialize services and data
+  void _initializeServices() {
+    // Create and configure Bluetooth service
+    _bluetoothService = CustomBluetoothService();
+
+    // Set up callbacks
+    _bluetoothService.onDeviceStateChanged = (device, state) {
+      if (mounted) {
+        setState(() {
+          _deviceConnectionStates[device.remoteId.str] = state;
+        });
+      }
+    };
+
+    _bluetoothService.onConnectedDevicesChanged = (devices) {
+      if (mounted) {
+        setState(() {
+          _connectedDevices = devices;
+        });
+      }
+    };
+
+    _bluetoothService.onDeviceConnected = (deviceName) {
+      _checkAndNotifyAllConnected(deviceName);
+    };
+
+    // Check permissions and load saved devices
     _checkPermissions();
     _loadSavedDevices().then((_) {
       // Initialize connection states for saved devices
@@ -92,9 +75,8 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
             DeviceConnectionState.disconnected;
       }
 
-      _initBluetooth();
       // Add a slight delay before auto-connecting
-      Future.delayed(const Duration(seconds: 1), () {
+      Future.delayed(const Duration(milliseconds: 300), () {
         if (_permissionGranted) {
           _autoConnectToSavedDevices();
         }
@@ -103,11 +85,30 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Handle app lifecycle changes
+    if (state == AppLifecycleState.resumed) {
+      // App is in the foreground
+      _checkPermissions();
+      if (_permissionGranted &&
+          _connectedDevices.isEmpty &&
+          _savedDevices.isNotEmpty) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          _autoConnectToSavedDevices();
+        });
+      }
+    } else if (state == AppLifecycleState.paused) {
+      // App is partially visible
+      _bluetoothService.fastDisconnectAllDevices();
+    }
+  }
+
+  @override
   void deactivate() {
     // This is called when the screen is about to be removed from the widget tree
-    // Disconnect all devices here
     debugPrint('SensorsScreen is being deactivated, disconnecting all devices');
-    _fastDisconnectAllDevices();
+    _bluetoothService.fastDisconnectAllDevices();
     super.deactivate();
   }
 
@@ -117,7 +118,7 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
     // Check if we're mounted and just became active
     if (mounted && ModalRoute.of(context)?.isCurrent == true) {
       // Small delay to avoid race conditions
-      Future.delayed(const Duration(milliseconds: 500), () {
+      Future.delayed(const Duration(milliseconds: 300), () {
         if (mounted &&
             _permissionGranted &&
             _savedDevices.isNotEmpty &&
@@ -131,20 +132,9 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
 
   @override
   void dispose() {
-    // Cancel all subscriptions when the widget is disposed
-    for (final subscription in _connectionStateSubscriptions.values) {
-      subscription.cancel();
-    }
-    _connectionStateSubscriptions.clear();
-
-    // Complete any pending completers to avoid memory leaks
-    for (final completer in _connectionCompleters.values) {
-      if (!completer.isCompleted) {
-        completer.complete();
-      }
-    }
-    _connectionCompleters.clear();
-
+    WidgetsBinding.instance.removeObserver(this);
+    _scanSubscription?.cancel();
+    _bluetoothService.dispose();
     super.dispose();
   }
 
@@ -188,986 +178,17 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
     }
   }
 
-  // Helper method to check Bluetooth adapter state
-  Future<bool> _isBluetoothOn() async {
-    try {
-      final adapterState = await FlutterBluePlus.adapterState.first;
-      return adapterState == BluetoothAdapterState.on;
-    } catch (e) {
-      debugPrint('Error checking Bluetooth state: $e');
-      return false;
-    }
-  }
-
-  // Initialize Bluetooth
-  Future<void> _initBluetooth() async {
-    // Get connected devices
-    try {
-      if (_permissionGranted) {
-        List<BluetoothDevice> connectedDevices =
-            FlutterBluePlus.connectedDevices;
-        if (mounted) {
-          setState(() {
-            _connectedDevices = connectedDevices;
-            // Update connection states for connected devices
-            for (final device in connectedDevices) {
-              _deviceConnectionStates[device.remoteId.str] =
-                  DeviceConnectionState.connected;
-              _setupConnectionListener(device);
-            }
-          });
-        }
-      }
-    } catch (e) {
-      _logError('Error getting connected devices: $e');
-    }
-  }
-
-  // Helper method for logging errors
-  void _logError(String message) {
-    // In production, this would use a proper logging framework
-    debugPrint(message);
-  }
-
-  // Update device connection state
-  void _updateDeviceConnectionState(
-      BluetoothDevice device, DeviceConnectionState state) {
-    if (mounted) {
-      setState(() {
-        _deviceConnectionStates[device.remoteId.str] = state;
-      });
-    }
-  }
-
-  // Get dynamic label for Connect button based on connection state
-  String _getConnectionButtonLabel() {
-    if (_isConnecting) {
-      return 'Connecting...';
-    } else if (_connectedDevices.length == _savedDevices.length &&
-        _savedDevices.isNotEmpty &&
-        _connectedDevices.isNotEmpty) {
-      return 'All Connected';
-    } else {
-      return 'Connect All Saved';
-    }
-  }
-
-  // Get device-specific connection policy
-  Map<String, dynamic> _getDevicePolicy(BluetoothDevice device) {
-    // HRMPro device needs special handling
-    if (device.platformName.toLowerCase().contains('hrm') ||
-        device.remoteId.str.contains('22:D8')) {
-      return _deviceConnectionPolicies['HRMPro']!;
-    }
-
-    for (final key in _deviceConnectionPolicies.keys) {
-      if (device.platformName.contains(key) && key != 'default') {
-        return _deviceConnectionPolicies[key]!;
-      }
-    }
-    return _deviceConnectionPolicies['default']!;
-  }
-
-  // Get the best available device name for display
-  String getDeviceDisplayName(BluetoothDevice device) {
-    // First try to use the platform name if available
-    if (device.platformName.isNotEmpty && device.platformName != 'null') {
-      return device.platformName;
-    }
-
-    // Then try our cached names
-    if (_deviceCachedNames.containsKey(device.remoteId.str)) {
-      return _deviceCachedNames[device.remoteId.str]!;
-    }
-
-    // Try to identify common sensors by MAC address pattern more specifically
-    if (device.remoteId.str.contains('22:D8')) {
-      return 'HRMPro+';
-    } else if (device.remoteId.str.contains('30:02')) {
-      return 'StrydX';
-    } else if (device.remoteId.str.toLowerCase().contains('hrm')) {
-      return 'Heart Rate Monitor';
-    } else if (device.remoteId.str.toLowerCase().contains('stryd') ||
-        device.remoteId.str.toLowerCase().contains('pod')) {
-      return 'Foot Pod';
-    }
-
-    // Fallback to a generic name with ID
-    return 'Device-${device.remoteId.str.substring(device.remoteId.str.length - 8)}';
-  }
-
-  // Special method for HRMPro+ MTU handling - optimized for speed
-  Future<void> _handleMtuForProblematicDevice(BluetoothDevice device) async {
-    try {
-      // Fast MTU configuration without waiting
-      device.requestMtu(23).timeout(
-        const Duration(milliseconds: 800),
-        onTimeout: () {
-          debugPrint(
-              'MTU request timed out for problematic device, continuing anyway');
-          return 23;
-        },
-      );
-
-      // No wait after MTU request for faster processing
-      debugPrint('Fast MTU handling for ${device.platformName}');
-    } catch (e) {
-      debugPrint('Error in MTU handling for problematic device: $e');
-      // Continue without delay
-    }
-  }
-
-  // Check if all devices are connected and show appropriate notification
-  void _checkAndNotifyAllConnected(String justConnectedDeviceName) {
-    // Only show individual connection messages if we don't have all devices connected
-    if (_connectedDevices.length < _savedDevices.length) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Connected to $justConnectedDeviceName'),
-          backgroundColor: Colors.green,
-          duration: const Duration(milliseconds: 800), // Shorter duration
-        ),
-      );
-      return;
-    }
-
-    // If this was the last device to connect, show the "all connected" message
-    if (_connectedDevices.length == _savedDevices.length) {
-      // Clear any existing snackbars to show the "all connected" message immediately
-      ScaffoldMessenger.of(context).clearSnackBars();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('All ${_savedDevices.length} devices connected!'),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 1), // Shorter duration
-        ),
-      );
-
-      // Force UI update to show "All Connected" status
-      setState(() {
-        _isConnecting = false;
-      });
-    }
-  }
-
-  // Setup connection state listener for a device with enhanced state tracking and faster notifications
-  void _setupConnectionListener(BluetoothDevice device) {
-    // Cancel existing subscription if any
-    _connectionStateSubscriptions[device.remoteId.str]?.cancel();
-
-    // Create new subscription with faster state updates
-    _connectionStateSubscriptions[device.remoteId.str] =
-        device.connectionState.listen((BluetoothConnectionState state) {
-      if (state == BluetoothConnectionState.connected) {
-        // Add this block to update UI when actually connected
-        if (mounted) {
-          setState(() {
-            if (!_connectedDevices.contains(device)) {
-              _connectedDevices.add(device);
-            }
-            _deviceConnectionStates[device.remoteId.str] =
-                DeviceConnectionState.connected;
-
-            // If the device has a name, update our cached name
-            if (device.platformName.isNotEmpty &&
-                device.platformName != 'null') {
-              _deviceCachedNames[device.remoteId.str] = device.platformName;
-            }
-          });
-
-          // Use microtask to make notifications appear more quickly
-          Future.microtask(() {
-            // Update all connected status immediately after a device connects
-            _checkAndNotifyAllConnected(getDeviceDisplayName(device));
-          });
-        }
-      } else if (state == BluetoothConnectionState.disconnected) {
-        final displayName = getDeviceDisplayName(device);
-        debugPrint('Device disconnected: $displayName');
-
-        if (mounted) {
-          setState(() {
-            _connectedDevices.removeWhere((d) => d.remoteId == device.remoteId);
-            _deviceConnectionStates[device.remoteId.str] =
-                DeviceConnectionState.disconnected;
-          });
-
-          // Quietly notify of disconnection
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('$displayName disconnected'),
-              backgroundColor: Colors.orange,
-              duration: const Duration(milliseconds: 800), // Shorter duration
-            ),
-          );
-        }
-
-        // Complete any pending connection completer for this device
-        if (_connectionCompleters.containsKey(device.remoteId.str)) {
-          if (!_connectionCompleters[device.remoteId.str]!.isCompleted) {
-            _connectionCompleters[device.remoteId.str]!.complete();
-          }
-          _connectionCompleters.remove(device.remoteId.str);
-        }
-      }
-    });
-  }
-
-  // Load saved devices from SharedPreferences with improved name handling
+  // Load saved devices from SharedPreferences via bluetooth service
   Future<void> _loadSavedDevices() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedDevicesJson = prefs.getStringList('saved_devices') ?? [];
-
-      final devices = <BluetoothDevice>[];
-      _deviceCachedNames.clear();
-
-      for (final deviceJson in savedDevicesJson) {
-        try {
-          final Map<String, dynamic> data = jsonDecode(deviceJson);
-
-          // Create a BluetoothDevice from the saved data
-          final deviceId = data['remoteId'];
-          final cachedName = data['cachedName'] ??
-              data['platformName'] ??
-              'Device-${deviceId.substring(0, 8)}';
-
-          // Store the cached name for display purposes
-          _deviceCachedNames[deviceId] = cachedName;
-
-          // Use the fromId constructor properly (it doesn't take name or type)
-          final device = BluetoothDevice.fromId(deviceId);
-
-          devices.add(device);
-
-          debugPrint('Loaded saved device: $cachedName ($deviceId)');
-        } catch (e) {
-          debugPrint('Error parsing device: $e');
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _savedDevices = devices;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading saved devices: $e');
-    }
-  }
-
-  // Save the list of devices to SharedPreferences with improved name handling
-  Future<void> _saveSavedDevicesListToPrefs() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-
-      final savedDevicesJson = _savedDevices.map((device) {
-        // Generate a display name if platformName is empty
-        String displayName = device.platformName;
-
-        // If platformName is empty, try to infer a better name based on device remoteId
-        if (displayName.isEmpty || displayName == 'null') {
-          // Check if it might be an HRM device based on MAC address
-          if (device.remoteId.str.contains('22:D8')) {
-            displayName = 'HRMPro+';
-          } else if (device.remoteId.str.contains('30:02')) {
-            displayName = 'StrydX';
-          } else {
-            // Fallback to a generic name with partial MAC
-            displayName = 'Device-${device.remoteId.str.substring(0, 8)}';
-          }
-        }
-
-        return jsonEncode({
-          'remoteId': device.remoteId.str,
-          'platformName': displayName,
-          'cachedName':
-              displayName, // Store a cached name for display even if device name is empty
-          'lastConnected': DateTime.now().millisecondsSinceEpoch,
-        });
-      }).toList();
-
-      await prefs.setStringList('saved_devices', savedDevicesJson);
-
-      debugPrint('Saved ${savedDevicesJson.length} devices to preferences');
-    } catch (e) {
-      debugPrint('Error saving devices to preferences: $e');
-    }
-  }
-
-  // Enhanced helper method to connect to a device with improved error handling and device-specific policies
-  Future<bool> _connectToDeviceWithRetry(BluetoothDevice device,
-      {int? maxRetries}) async {
-    // Get device-specific policy
-    final policy = _getDevicePolicy(device);
-
-    // Use provided maxRetries or get from policy
-    final attempts = maxRetries ?? policy['connectionAttempts'];
-    int currentAttempt = 0;
-
-    // Create a completer to track this connection attempt
-    final completer = Completer<void>();
-    _connectionCompleters[device.remoteId.str] = completer;
-
-    // Check if this is a problematic device that needs special handling
-    final bool isProblematicDevice =
-        device.platformName.toLowerCase().contains('hrm') ||
-            device.remoteId.str.contains('22:D8') ||
-            policy['specialHandling'] == true;
-
-    while (currentAttempt < attempts) {
-      currentAttempt++;
-      try {
-        // Capture actual device name (may be empty at this point)
-        String displayName = getDeviceDisplayName(device);
-
-        debugPrint(
-            'Connecting to $displayName (Attempt $currentAttempt/$attempts)');
-
-        // Check if Bluetooth is on
-        if (!await _isBluetoothOn()) {
-          debugPrint('Bluetooth is off, cannot connect');
-          return false;
-        }
-
-        // Attempt to disconnect first if this is a retry
-        if (currentAttempt > 1) {
-          try {
-            await device.disconnect().timeout(
-              const Duration(seconds: 2),
-              onTimeout: () {
-                debugPrint('Disconnect timeout, continuing anyway');
-              },
-            );
-            // Shorter delay after disconnection
-            await Future.delayed(
-                Duration(milliseconds: policy['postConnectDelay'] ~/ 2));
-          } catch (e) {
-            // Ignore disconnect errors
-            debugPrint('Disconnect before retry error: $e');
-          }
-        }
-
-        // Update state to connecting
-        _updateDeviceConnectionState(device, DeviceConnectionState.connecting);
-
-        // Connect with device-specific timeout
-        final timeout = Duration(seconds: policy['timeout']);
-
-        // More reliable connection method with special handling for problematic devices
-        try {
-          // Special handling for HRMPro or similar devices
-          if (isProblematicDevice) {
-            // Use longer timeout for problematic devices
-            await device
-                .connect(
-              timeout: Duration(seconds: policy['timeout'] + 5),
-              autoConnect: false,
-            )
-                .timeout(
-              Duration(seconds: policy['timeout'] + 5),
-              onTimeout: () {
-                throw Exception('Connection timeout for problematic device');
-              },
-            );
-          } else {
-            // Standard connection for normal devices
-            await device
-                .connect(
-              timeout: timeout,
-              autoConnect: false,
-            )
-                .timeout(
-              timeout,
-              onTimeout: () {
-                throw Exception('Connection timeout');
-              },
-            );
-          }
-        } catch (connectError) {
-          debugPrint('Initial connection error: $connectError');
-
-          if (isProblematicDevice && currentAttempt < attempts) {
-            // For problematic devices, try with different strategy
-            try {
-              debugPrint('Retrying problematic device with special handling');
-
-              // Force disconnect with longer timeout
-              try {
-                await device.disconnect().timeout(const Duration(seconds: 2),
-                    onTimeout: () {
-                  debugPrint(
-                      'Disconnect timeout on special retry, continuing anyway');
-                });
-              } catch (_) {}
-
-              // Brief delay
-              await Future.delayed(const Duration(seconds: 2));
-
-              // Retry connection with longer timeout
-              await device
-                  .connect(
-                timeout: Duration(seconds: policy['timeout'] + 5),
-                autoConnect: false,
-              )
-                  .timeout(
-                Duration(seconds: policy['timeout'] + 5),
-                onTimeout: () {
-                  throw Exception('Connection timeout on special retry');
-                },
-              );
-            } catch (secondTryError) {
-              debugPrint('Special retry also failed: $secondTryError');
-              rethrow;
-            }
-          } else {
-            rethrow;
-          }
-        }
-
-        // Setup connection state listener
-        _setupConnectionListener(device);
-
-        // Connection successful - add device-specific delay before continuing
-        await Future.delayed(
-            Duration(milliseconds: policy['postConnectDelay']));
-
-        // Update state to authenticating during MTU negotiation
-        _updateDeviceConnectionState(
-            device, DeviceConnectionState.authenticating);
-
-        // Handle MTU differently for problematic devices
-        if (isProblematicDevice) {
-          await _handleMtuForProblematicDevice(device);
-        } else {
-          // Set MTU with device-specific settings and shorter timeout
-          try {
-            final mtuTimeout = Duration(seconds: policy['mtuTimeout']);
-            final mtu = await device.requestMtu(policy['mtu']).timeout(
-              mtuTimeout,
-              onTimeout: () {
-                debugPrint(
-                    'MTU request timeout, but connection is established');
-                return policy['mtu']; // Use default from policy
-              },
-            );
-            debugPrint('MTU set to $mtu for device ${device.platformName}');
-
-            // Some devices need a second MTU request to stabilize
-            if (policy['skipSecondMtu'] != true) {
-              try {
-                // Add small delay between MTU requests
-                await Future.delayed(const Duration(milliseconds: 300));
-
-                // Second MTU request (only for devices that can handle it)
-                await device.requestMtu(policy['mtu']).timeout(
-                  const Duration(seconds: 1),
-                  onTimeout: () {
-                    debugPrint('Second MTU request timeout, ignoring');
-                    return policy['mtu'];
-                  },
-                );
-              } catch (secondMtuError) {
-                // Ignore errors from second MTU request
-                debugPrint('Second MTU request error: $secondMtuError');
-              }
-            }
-          } catch (mtuError) {
-            // Log MTU errors but don't fail the connection
-            debugPrint(
-                'MTU request failed for ${device.platformName}: $mtuError');
-
-            // Brief delay to let the stack stabilize after MTU failure
-            await Future.delayed(const Duration(milliseconds: 300));
-          }
-        }
-
-        // Update state to connected after successful MTU negotiation
-        _updateDeviceConnectionState(device, DeviceConnectionState.connected);
-
-        // Ensure device is in connected devices list
-        if (mounted) {
-          setState(() {
-            if (!_connectedDevices.contains(device)) {
-              _connectedDevices.add(device);
-            }
-          });
-        }
-
-        return true; // Connection succeeded
-      } catch (e) {
-        debugPrint(
-            'Connection attempt $currentAttempt failed for ${device.platformName}: $e');
-
-        if (currentAttempt >= attempts) {
-          debugPrint('Max retries reached for ${device.platformName}');
-
-          // Update state to failed
-          _updateDeviceConnectionState(device, DeviceConnectionState.failed);
-
-          return false;
-        }
-
-        // Device-specific wait before retrying, with shorter delay
-        final baseDelay = policy['retryDelay'];
-        final adjustedDelay = isProblematicDevice ? baseDelay : baseDelay;
-
-        await Future.delayed(Duration(seconds: adjustedDelay));
-      }
-    }
-
-    return false;
-  }
-
-  // Optimized method for connecting problematic devices
-  Future<bool> _fastConnectProblematicDevice(BluetoothDevice device) async {
-    try {
-      // Get display name
-      final displayName = getDeviceDisplayName(device);
-      debugPrint('Fast connecting to $displayName');
-
-      // Update state to connecting
-      _updateDeviceConnectionState(device, DeviceConnectionState.connecting);
-
-      // Streamlined connection attempt with higher timeout
-      await device
-          .connect(
-        timeout: const Duration(seconds: 10),
-        autoConnect: false,
-      )
-          .timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw Exception('Connection timeout');
-        },
-      );
-
-      // Setup connection listener
-      _setupConnectionListener(device);
-
-      // Brief delay before MTU
-      await Future.delayed(const Duration(milliseconds: 300));
-
-      // Update state
-      _updateDeviceConnectionState(
-          device, DeviceConnectionState.authenticating);
-
-      // Fast MTU handling
-      await _handleMtuForProblematicDevice(device);
-
-      // Mark as connected
-      _updateDeviceConnectionState(device, DeviceConnectionState.connected);
-
-      // Ensure device is in connected list
-      if (mounted) {
-        setState(() {
-          if (!_connectedDevices.contains(device)) {
-            _connectedDevices.add(device);
-          }
-        });
-      }
-
-      return true;
-    } catch (e) {
-      debugPrint('Fast connection failed: $e');
-      _updateDeviceConnectionState(device, DeviceConnectionState.failed);
-      return false;
-    }
-  }
-
-  // Fast method to disconnect all devices
-  Future<void> _fastDisconnectAllDevices() async {
-    if (_connectedDevices.isEmpty) return;
-
-    // Create a copy of the list
-    final devices = List<BluetoothDevice>.from(_connectedDevices);
-
-    // Disconnect all devices in parallel for speed
-    List<Future<void>> disconnectFutures = [];
-
-    for (final device in devices) {
-      disconnectFutures.add(_fastDisconnectDevice(device));
-    }
-
-    // Wait for all disconnections to complete with a timeout
-    await Future.wait(disconnectFutures).timeout(const Duration(seconds: 2),
-        onTimeout: () {
-      debugPrint('Disconnect timeout, continuing anyway');
-      return [];
-    });
-
-    // Update UI after all disconnections
+    final devices = await _bluetoothService.loadSavedDevices();
     if (mounted) {
       setState(() {
-        _connectedDevices.clear();
-        for (final device in devices) {
-          _deviceConnectionStates[device.remoteId.str] =
-              DeviceConnectionState.disconnected;
-        }
+        _savedDevices = devices;
       });
     }
   }
 
-  // Fast disconnect for individual device
-  Future<void> _fastDisconnectDevice(BluetoothDevice device) async {
-    try {
-      await device.disconnect().timeout(
-        const Duration(milliseconds: 800),
-        onTimeout: () {
-          debugPrint('Fast disconnect timeout for ${device.platformName}');
-          return;
-        },
-      );
-
-      // Update UI immediately
-      if (mounted) {
-        setState(() {
-          _connectedDevices.removeWhere((d) => d.remoteId == device.remoteId);
-          _deviceConnectionStates[device.remoteId.str] =
-              DeviceConnectionState.disconnected;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error in fast disconnect: $e');
-      // Remove from list even if disconnection fails
-      if (mounted) {
-        setState(() {
-          _connectedDevices.removeWhere((d) => d.remoteId == device.remoteId);
-          _deviceConnectionStates[device.remoteId.str] =
-              DeviceConnectionState.disconnected;
-        });
-      }
-    }
-  }
-
-  // Optimized auto-connect implementation
-  Future<void> _autoConnectToSavedDevices() async {
-    if (_savedDevices.isEmpty) return;
-
-    // Prevent multiple concurrent auto-connect calls
-    if (_isConnecting) {
-      debugPrint('Connection already in progress, skipping');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Connection already in progress'),
-            duration: Duration(milliseconds: 800), // Shorter duration
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-
-    setState(() {
-      _isConnecting = true;
-    });
-
-    // Show loading indicator - but very briefly
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Connecting to devices...'),
-          duration: Duration(milliseconds: 800), // Shorter duration
-        ),
-      );
-    }
-
-    // Check Bluetooth state first
-    if (!await _isBluetoothOn()) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Bluetooth is turned off'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 1), // Shorter duration
-          ),
-        );
-        setState(() {
-          _isConnecting = false;
-        });
-      }
-      return;
-    }
-
-    // Disconnect all devices faster
-    await _fastDisconnectAllDevices();
-
-    // Shorter delay after disconnection
-    await Future.delayed(const Duration(seconds: 1)); // Reduced from 3 seconds
-
-    // Track connection results
-    int successCount = 0;
-
-    // Divide devices into standard and problematic ones
-    final standardDevices = _savedDevices
-        .where((d) =>
-            !d.platformName.toLowerCase().contains('hrm') &&
-            !d.remoteId.str.contains('22:D8'))
-        .toList();
-
-    final problematicDevices = _savedDevices
-        .where((d) =>
-            d.platformName.toLowerCase().contains('hrm') ||
-            d.remoteId.str.contains('22:D8'))
-        .toList();
-
-    // First connect to standard devices
-    for (final device in standardDevices) {
-      // Skip already connected devices
-      if (_connectedDevices.any((d) => d.remoteId == device.remoteId)) {
-        successCount++;
-        continue;
-      }
-
-      final success = await _connectSingleDevice(device);
-      if (success) {
-        successCount++;
-      }
-
-      // Add shorter delay between connections
-      await Future.delayed(
-          const Duration(seconds: 1)); // Reduced from 2 seconds
-    }
-
-    // Then connect to problematic devices with shorter delays
-    for (final device in problematicDevices) {
-      // Skip already connected devices
-      if (_connectedDevices.any((d) => d.remoteId == device.remoteId)) {
-        successCount++;
-        continue;
-      }
-
-      // Brief delay before problematic devices
-      await Future.delayed(
-          const Duration(seconds: 1)); // Reduced from 2 seconds
-
-      final success = await _connectSingleDevice(device);
-      if (success) {
-        successCount++;
-      }
-
-      // Brief delay after problematic devices
-      await Future.delayed(
-          const Duration(seconds: 2)); // Reduced from 4 seconds
-    }
-
-    // Final status update only if we're not displaying the all-connected message already
-    if (mounted && successCount != _savedDevices.length) {
-      setState(() {
-        _isConnecting = false;
-      });
-
-      if (successCount == 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to connect to any devices'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 1), // Shorter duration
-          ),
-        );
-      } else if (successCount < _savedDevices.length) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                'Connected to $successCount of ${_savedDevices.length} devices'),
-            backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 1), // Shorter duration
-          ),
-        );
-      }
-    }
-  }
-
-  // Helper method to connect a single device with optimized path
-  Future<bool> _connectSingleDevice(BluetoothDevice device) async {
-    // Update UI state
-    if (mounted) {
-      _updateDeviceConnectionState(device, DeviceConnectionState.connecting);
-    }
-
-    // Connect with retry mechanism - but faster for problematic devices
-    final policy = _getDevicePolicy(device);
-    if (policy['fastMode'] == true) {
-      // Use streamlined connection for problematic devices
-      return await _fastConnectProblematicDevice(device);
-    } else {
-      // Use standard connection path for normal devices
-      return await _connectToDeviceWithRetry(device);
-    }
-  }
-
-  // Start scanning for devices
-  void _startScan() async {
-    if (!_permissionGranted) {
-      await _checkPermissions();
-      if (!_permissionGranted) {
-        _showPermissionDialog();
-        return;
-      }
-    }
-
-    if (mounted) {
-      setState(() {
-        _scanResults = [];
-        _isScanning = true;
-      });
-    }
-
-    try {
-      // Stop any existing scan
-      await FlutterBluePlus.stopScan();
-
-      // Listen for scan results
-      FlutterBluePlus.scanResults.listen((results) {
-        if (mounted) {
-          setState(() {
-            _scanResults = results;
-          });
-        }
-      });
-
-      // Start scanning
-      await FlutterBluePlus.startScan(
-        timeout: const Duration(seconds: 15),
-        androidScanMode: AndroidScanMode.lowLatency,
-      );
-    } catch (e) {
-      _logError('Error scanning: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isScanning = false;
-        });
-      }
-    }
-  }
-
-  // Connect to a device with better error handling
-  Future<void> _connectToDevice(BluetoothDevice device) async {
-    // Prevent multiple concurrent connections
-    if (_isConnecting) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Another connection is in progress. Please wait.'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-
-    setState(() {
-      _isConnecting = true;
-    });
-
-    // Get display name
-    final displayName = getDeviceDisplayName(device);
-
-    // Mark as connecting
-    if (mounted) {
-      _updateDeviceConnectionState(device, DeviceConnectionState.connecting);
-
-      // Show connecting indicator
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Connecting to $displayName...'),
-          duration: const Duration(seconds: 1), // Shorter duration
-        ),
-      );
-    }
-
-    // Add a timeout for the entire connection process
-    bool hasTimedOut = false;
-    Timer? connectionTimeout;
-
-    // Set overall connection timeout
-    connectionTimeout = Timer(const Duration(seconds: 15), () {
-      // Reduced from 30 seconds
-      hasTimedOut = true;
-      if (mounted &&
-          (_deviceConnectionStates[device.remoteId.str] ==
-                  DeviceConnectionState.connecting ||
-              _deviceConnectionStates[device.remoteId.str] ==
-                  DeviceConnectionState.authenticating)) {
-        debugPrint('Global connection timeout for $displayName');
-
-        // Force update state to failed
-        _updateDeviceConnectionState(device, DeviceConnectionState.failed);
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Connection to $displayName timed out'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    });
-
-    // Use the fast path for problematic devices
-    final policy = _getDevicePolicy(device);
-    final success = policy['fastMode'] == true
-        ? await _fastConnectProblematicDevice(device)
-        : await _connectToDeviceWithRetry(device);
-
-    // Cancel timeout timer
-    connectionTimeout.cancel();
-
-    if (success && mounted && !hasTimedOut) {
-      // Update UI
-      setState(() {
-        if (!_connectedDevices.contains(device)) {
-          _connectedDevices.add(device);
-        }
-        _deviceConnectionStates[device.remoteId.str] =
-            DeviceConnectionState.connected;
-      });
-
-      // Show connected message
-      _checkAndNotifyAllConnected(displayName);
-
-      // Ask to save the device
-      _showSaveDeviceDialog(device);
-    } else if (mounted && !hasTimedOut) {
-      // Update UI for failed connection only if we haven't already timed out
-      _updateDeviceConnectionState(device, DeviceConnectionState.failed);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to connect to $displayName'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-
-    if (mounted) {
-      setState(() {
-        _isConnecting = false;
-      });
-    }
-  }
-
-  // Disconnect from a device
-  Future<void> _disconnectDevice(BluetoothDevice device) async {
-    try {
-      await _fastDisconnectDevice(device);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Disconnected from ${getDeviceDisplayName(device)}'),
-            duration: const Duration(milliseconds: 800), // Shorter duration
-          ),
-        );
-      }
-    } catch (e) {
-      _logError('Error disconnecting: $e');
-    }
-  }
-
-  // Save device to persistent storage
+  // Save a device to persistent storage
   Future<void> _saveDevice(BluetoothDevice device) async {
     try {
       // Add to the local list first for immediate UI update
@@ -1179,16 +200,16 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
         });
       }
 
-      // Then save to persistent storage
-      await _saveSavedDevicesListToPrefs();
+      // Save to persistent storage
+      await _bluetoothService.saveDevicesToPrefs(_savedDevices);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content:
-                Text('${getDeviceDisplayName(device)} saved for auto-connect'),
+            content: Text(
+                '${_bluetoothService.getDeviceDisplayName(device)} saved for auto-connect'),
             backgroundColor: Colors.green,
-            duration: const Duration(milliseconds: 800), // Shorter duration
+            duration: const Duration(milliseconds: 800),
           ),
         );
       }
@@ -1208,18 +229,262 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
       }
 
       // Update persistent storage
-      await _saveSavedDevicesListToPrefs();
+      await _bluetoothService.saveDevicesToPrefs(_savedDevices);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Forgot ${getDeviceDisplayName(device)}'),
-            duration: const Duration(milliseconds: 800), // Shorter duration
+            content: Text(
+                'Forgot ${_bluetoothService.getDeviceDisplayName(device)}'),
+            duration: const Duration(milliseconds: 800),
           ),
         );
       }
     } catch (e) {
       debugPrint('Error forgetting device: $e');
+    }
+  }
+
+  // Check if all devices are connected and show appropriate notification
+  void _checkAndNotifyAllConnected(String justConnectedDeviceName) {
+    // Only show individual connection messages if we don't have all devices connected
+    if (_connectedDevices.length < _savedDevices.length) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Connected to $justConnectedDeviceName'),
+          backgroundColor: Colors.green,
+          duration: const Duration(milliseconds: 800),
+        ),
+      );
+      return;
+    }
+
+    // If this was the last device to connect, show the "all connected" message
+    if (_connectedDevices.length == _savedDevices.length) {
+      // Clear any existing snackbars to show the "all connected" message immediately
+      ScaffoldMessenger.of(context).clearSnackBars();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('All ${_savedDevices.length} devices connected!'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 1),
+        ),
+      );
+
+      // Force UI update to show "All Connected" status
+      setState(() {
+        _isConnecting = false;
+      });
+    }
+  }
+
+  // Get dynamic label for Connect button based on connection state
+  String _getConnectionButtonLabel() {
+    if (_isConnecting) {
+      return 'Connecting...';
+    } else if (_connectedDevices.length == _savedDevices.length &&
+        _savedDevices.isNotEmpty &&
+        _connectedDevices.isNotEmpty) {
+      return 'All Connected';
+    } else {
+      return 'Connect All Saved';
+    }
+  }
+
+  // Start scanning for devices with filter options
+  void _startScan() async {
+    if (!_permissionGranted) {
+      await _checkPermissions();
+      if (!_permissionGranted) {
+        _showPermissionDialog();
+        return;
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _scanResults = [];
+        _isScanning = true;
+      });
+    }
+
+    // Cancel existing subscription if any
+    _scanSubscription?.cancel();
+
+    // Start scan with callback
+    await _bluetoothService.startScan(onResultsUpdated: (results) {
+      if (mounted) {
+        setState(() {
+          _scanResults = results;
+        });
+      }
+    });
+
+    // Set up a timer to stop the scanning display after 10 seconds
+    Future.delayed(const Duration(seconds: 10), () {
+      if (mounted) {
+        setState(() {
+          _isScanning = false;
+        });
+      }
+    });
+  }
+
+  // Auto-connect to all saved devices
+  Future<void> _autoConnectToSavedDevices() async {
+    if (_savedDevices.isEmpty) return;
+
+    // Prevent multiple concurrent auto-connect calls
+    if (_isConnecting) {
+      debugPrint('Connection already in progress, skipping');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Connection already in progress'),
+            duration: Duration(milliseconds: 800),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _isConnecting = true;
+    });
+
+    // Show loading indicator
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Connecting to devices...'),
+          duration: Duration(milliseconds: 800),
+        ),
+      );
+    }
+
+    // Check Bluetooth state first
+    if (!await _bluetoothService.isBluetoothOn()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bluetooth is turned off'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 1),
+          ),
+        );
+        setState(() {
+          _isConnecting = false;
+        });
+      }
+      return;
+    }
+
+    // Connect to all saved devices
+    final successCount =
+        await _bluetoothService.autoConnectToSavedDevices(_savedDevices);
+
+    // Final status update only if we're not displaying the all-connected message already
+    if (mounted && successCount != _savedDevices.length) {
+      setState(() {
+        _isConnecting = false;
+      });
+
+      if (successCount == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to connect to any devices'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 1),
+          ),
+        );
+      } else if (successCount < _savedDevices.length) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Connected to $successCount of ${_savedDevices.length} devices'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+    }
+  }
+
+  // Connect to a specific device
+  Future<void> _connectToDevice(BluetoothDevice device) async {
+    // Prevent multiple concurrent connections
+    if (_isConnecting) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Another connection is in progress. Please wait.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _isConnecting = true;
+    });
+
+    // Get display name
+    final displayName = _bluetoothService.getDeviceDisplayName(device);
+
+    // Show connecting indicator
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Connecting to $displayName...'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
+
+    // Use the right connection method based on device type
+    final policy = _bluetoothService.getDevicePolicy(device);
+    final success = policy['fastMode'] == true
+        ? await _bluetoothService.fastConnectProblematicDevice(device)
+        : await _bluetoothService.connectToDeviceWithRetry(device);
+
+    if (success && mounted) {
+      // Ask to save the device
+      _showSaveDeviceDialog(device);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to connect to $displayName'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+
+    if (mounted) {
+      setState(() {
+        _isConnecting = false;
+      });
+    }
+  }
+
+  // Disconnect from a device
+  Future<void> _disconnectDevice(BluetoothDevice device) async {
+    try {
+      await _bluetoothService.fastDisconnectDevice(device);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Disconnected from ${_bluetoothService.getDeviceDisplayName(device)}'),
+            duration: const Duration(milliseconds: 800),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error disconnecting: $e');
     }
   }
 
@@ -1232,7 +497,7 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Save Device'),
         content: Text(
-            'Do you want to save ${getDeviceDisplayName(device)} for auto-connect?'),
+            'Do you want to save ${_bluetoothService.getDeviceDisplayName(device)} for auto-connect?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -1596,7 +861,7 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
             : DeviceConnectionState.disconnected);
 
     // Get the best device name using our helper
-    final deviceName = getDeviceDisplayName(device);
+    final deviceName = _bluetoothService.getDeviceDisplayName(device);
 
     // Calculate signal strength
     int signalStrength = 0;
@@ -1846,11 +1111,13 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
 
   IconData _getDeviceIcon(String deviceName) {
     final name = deviceName.toLowerCase();
-    if (name.contains('heart') || name.contains('hr')) {
+    if (name.contains('heart') || name.contains('hr') || name.contains('hrm')) {
       return Icons.favorite;
     } else if (name.contains('watch') || name.contains('band')) {
       return Icons.watch;
-    } else if (name.contains('foot') || name.contains('pod')) {
+    } else if (name.contains('foot') ||
+        name.contains('pod') ||
+        name.contains('stryd')) {
       return Icons.directions_walk;
     } else if (name.contains('headphone') || name.contains('earbud')) {
       return Icons.headphones;
