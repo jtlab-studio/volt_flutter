@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class SensorsScreen extends ConsumerStatefulWidget {
   const SensorsScreen({super.key});
@@ -22,7 +24,15 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
   void initState() {
     super.initState();
     _checkPermissions();
-    _initBluetooth();
+    _loadSavedDevices().then((_) {
+      _initBluetooth();
+      // Add a slight delay before auto-connecting
+      Future.delayed(const Duration(seconds: 1), () {
+        if (_permissionGranted) {
+          _autoConnectToSavedDevices();
+        }
+      });
+    });
   }
 
   // Check for Bluetooth and location permissions
@@ -65,9 +75,6 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
 
   // Initialize Bluetooth
   Future<void> _initBluetooth() async {
-    // Load saved devices (in a real app, this would come from a database)
-    _loadSavedDevices();
-
     // Get connected devices
     try {
       if (_permissionGranted) {
@@ -88,12 +95,111 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
     debugPrint(message);
   }
 
-  // Load saved devices (this would come from database in real app)
-  void _loadSavedDevices() {
-    // Mock data - in a real app, you'd load this from a database
-    setState(() {
-      _savedDevices = [];
-    });
+  // Load saved devices from SharedPreferences
+  Future<void> _loadSavedDevices() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedDevicesJson = prefs.getStringList('saved_devices') ?? [];
+
+      final devices = <BluetoothDevice>[];
+
+      for (final deviceJson in savedDevicesJson) {
+        try {
+          final Map<String, dynamic> data = jsonDecode(deviceJson);
+
+          // Create a BluetoothDevice from the saved data
+          final deviceId = data['remoteId'];
+
+          // Use the fromId constructor properly (it doesn't take name or type)
+          final device = BluetoothDevice.fromId(deviceId);
+
+          devices.add(device);
+        } catch (e) {
+          debugPrint('Error parsing device: $e');
+        }
+      }
+
+      setState(() {
+        _savedDevices = devices;
+      });
+    } catch (e) {
+      debugPrint('Error loading saved devices: $e');
+    }
+  }
+
+  // Save the list of devices to SharedPreferences
+  Future<void> _saveSavedDevicesListToPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      final savedDevicesJson = _savedDevices.map((device) {
+        return jsonEncode({
+          'remoteId': device.remoteId.str,
+          'platformName': device.platformName,
+          // Don't store type as it's not available in the API
+        });
+      }).toList();
+
+      await prefs.setStringList('saved_devices', savedDevicesJson);
+    } catch (e) {
+      debugPrint('Error saving devices to preferences: $e');
+    }
+  }
+
+  // Method to auto-connect to saved devices
+  Future<void> _autoConnectToSavedDevices() async {
+    if (_savedDevices.isEmpty) return;
+
+    // Show a loading indicator
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Connecting to saved devices...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+
+    // Try to connect to each saved device
+    for (final device in _savedDevices) {
+      // Skip if already connected
+      if (_connectedDevices.any((d) => d.remoteId == device.remoteId)) {
+        continue;
+      }
+
+      try {
+        await device
+            .connect(
+          autoConnect: true,
+        )
+            .timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            debugPrint('Connection timeout for device: ${device.platformName}');
+            return;
+          },
+        );
+
+        // Add to connected devices list
+        setState(() {
+          if (!_connectedDevices.contains(device)) {
+            _connectedDevices.add(device);
+          }
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Connected to ${device.platformName}'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('Failed to auto-connect to ${device.platformName}: $e');
+      }
+    }
   }
 
   // Start scanning for devices
@@ -194,39 +300,53 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
     }
   }
 
-  // Save a device for auto-connect
-  void _saveDevice(BluetoothDevice device) {
-    // In a real app, you'd save this to a database
-    setState(() {
-      if (!_savedDevices.any((d) => d.remoteId == device.remoteId)) {
-        _savedDevices.add(device);
-      }
-    });
+  // Save device to persistent storage
+  Future<void> _saveDevice(BluetoothDevice device) async {
+    try {
+      // Add to the local list first for immediate UI update
+      setState(() {
+        if (!_savedDevices.any((d) => d.remoteId == device.remoteId)) {
+          _savedDevices.add(device);
+        }
+      });
 
-    if (!mounted) return;
+      // Then save to persistent storage
+      await _saveSavedDevicesListToPrefs();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${device.platformName} saved for auto-connect'),
-        backgroundColor: Colors.green,
-      ),
-    );
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${device.platformName} saved for auto-connect'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error saving device: $e');
+    }
   }
 
   // Forget a device
-  void _forgetDevice(BluetoothDevice device) {
-    // In a real app, you'd remove this from a database
-    setState(() {
-      _savedDevices.removeWhere((d) => d.remoteId == device.remoteId);
-    });
+  Future<void> _forgetDevice(BluetoothDevice device) async {
+    try {
+      // Remove from the local list
+      setState(() {
+        _savedDevices.removeWhere((d) => d.remoteId == device.remoteId);
+      });
 
-    if (!mounted) return;
+      // Update persistent storage
+      await _saveSavedDevicesListToPrefs();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Forgot ${device.platformName}'),
-      ),
-    );
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Forgot ${device.platformName}'),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error forgetting device: $e');
+    }
   }
 
   // Dialog to ask for saving a device
@@ -294,15 +414,30 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
       body: _permissionGranted
           ? _buildSensorContent()
           : _buildPermissionRequest(),
-      floatingActionButton: _permissionGranted
-          ? FloatingActionButton(
-              onPressed: _isScanning ? null : _startScan,
-              backgroundColor: _isScanning ? Colors.grey : Colors.teal,
-              child: _isScanning
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Icon(Icons.bluetooth_searching),
-            )
-          : null,
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          if (_savedDevices.isNotEmpty && _permissionGranted)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16.0),
+              child: FloatingActionButton.extended(
+                onPressed: _autoConnectToSavedDevices,
+                backgroundColor: Colors.green,
+                icon: const Icon(Icons.bluetooth_connected),
+                label: const Text('Connect All Saved'),
+                heroTag: 'autoConnect',
+              ),
+            ),
+          FloatingActionButton(
+            onPressed: _isScanning ? null : _startScan,
+            backgroundColor: _isScanning ? Colors.grey : Colors.teal,
+            child: _isScanning
+                ? const CircularProgressIndicator(color: Colors.white)
+                : const Icon(Icons.bluetooth_searching),
+            heroTag: 'scan',
+          ),
+        ],
+      ),
     );
   }
 

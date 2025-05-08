@@ -1,3 +1,4 @@
+// Original content without our Java compatibility changes
 allprojects {
     repositories {
         google()
