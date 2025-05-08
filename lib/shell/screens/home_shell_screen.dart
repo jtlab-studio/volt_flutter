@@ -88,15 +88,27 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen>
   @override
   Widget build(BuildContext context) {
     final currentMenuItem = menuItems[_selectedIndex];
+    final screenHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
       body: Stack(
         children: [
-          // Background pattern or image can go here
+          // Background gradient/pattern
           Container(
             width: double.infinity,
             height: double.infinity,
-            color: const Color(0xFF121212),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  const Color(0xFF121212),
+                  Color.lerp(const Color(0xFF121212), currentMenuItem.color,
+                          0.1) ??
+                      const Color(0xFF121212),
+                ],
+              ),
+            ),
           ),
 
           // Main content area
@@ -175,8 +187,11 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen>
               child: Padding(
                 padding:
                     const EdgeInsets.only(bottom: 80.0), // Space for footer
-                child: Center(
+                child: Container(
+                  height: screenHeight * 0.6, // Limited height for 4 items
+                  alignment: Alignment.center,
                   child: VerticalCarouselMenu(
+                    // This is a widget, not a method
                     menuItems: menuItems,
                     onItemSelected: _onMenuItemSelected,
                     initialIndex: _selectedIndex,
@@ -197,7 +212,7 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen>
                 color: Colors.black,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withAlpha(128), // Fixed withOpacity
+                    color: Colors.black.withAlpha(128),
                     blurRadius: 10,
                     offset: const Offset(0, -2),
                   ),
@@ -249,7 +264,7 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen>
         color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: menuItem.color.withAlpha(77), // Fixed withOpacity
+          color: menuItem.color.withAlpha(77),
           width: 2,
         ),
       ),
@@ -261,10 +276,10 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen>
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: menuItem.color.withAlpha(25), // Already fixed
+                color: menuItem.color.withAlpha(25),
                 border: Border(
                   bottom: BorderSide(
-                    color: menuItem.color.withAlpha(77), // Already fixed
+                    color: menuItem.color.withAlpha(77),
                     width: 1,
                   ),
                 ),
@@ -289,69 +304,111 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen>
               ),
             ),
 
-            // Content for the selected menu item (placeholder)
+            // Onboarding content for each menu item
             Expanded(
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        menuItem.icon,
-                        size: 80,
-                        color: menuItem.color.withAlpha(128), // Already fixed
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      menuItem.icon,
+                      size: 80,
+                      color: menuItem.color.withAlpha(128),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      '${menuItem.title} Module',
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
-                      const SizedBox(height: 24),
-                      Text(
-                        '${menuItem.title} Module',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      _getModuleDescription(menuItem.id),
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey[300],
+                        height: 1.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    _buildFeatureList(menuItem),
+                    const SizedBox(height: 32),
+                    ElevatedButton(
+                      onPressed: () {
+                        // Navigate to the actual module screen
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: menuItem.color,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                      child: Text(
+                        'Open ${menuItem.title}',
                         style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _getModuleDescription(menuItem.id),
-                        style: TextStyle(
                           fontSize: 16,
-                          color: Colors.grey[300],
-                          height: 1.5,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 32),
-                      ElevatedButton(
-                        onPressed: () {
-                          // Navigate to the actual module screen
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: menuItem.color,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 24, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                        ),
-                        child: Text(
-                          'Open ${menuItem.title}',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildFeatureList(MenuItemData menuItem) {
+    final features = _getModuleFeatures(menuItem.id);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Key Features:',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...features.map((feature) => Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.check_circle,
+                    color: menuItem.color,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      feature,
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Colors.grey[300],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )),
+      ],
     );
   }
 
@@ -373,6 +430,75 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen>
         return 'Connect and manage your fitness devices, heart rate monitors, and other sensors to enhance your running data.';
       default:
         return 'Explore this feature to enhance your running experience with Volt Running Tracker.';
+    }
+  }
+
+  List<String> _getModuleFeatures(String moduleId) {
+    switch (moduleId) {
+      case 'run':
+        return [
+          'Real-time GPS tracking with accurate pace and distance metrics',
+          'Voice coach provides updates during your run',
+          'Heart rate zone monitoring and calorie tracking',
+          'Auto-pause when you stop at intersections',
+          'Post-run analytics with detailed performance insights'
+        ];
+      case 'routes':
+        return [
+          'Discover popular running routes in your neighborhood',
+          'Filter routes by distance, elevation, terrain, and difficulty',
+          'Create and share your own custom routes',
+          'View detailed elevation profiles and safety ratings',
+          'Download routes for offline use'
+        ];
+      case 'race':
+        return [
+          'Custom training plans for 5K, 10K, half marathon, and marathon',
+          'Race day preparation checklists and nutrition guides',
+          'Performance prediction based on your training data',
+          'Pace strategy calculator for optimal race performance',
+          'Recovery plans after race completion'
+        ];
+      case 'academy':
+        return [
+          'Video tutorials on proper running techniques',
+          'Nutrition guides for runners at all levels',
+          'Injury prevention exercises and rehabilitation guides',
+          'Training methodology articles from professional coaches',
+          'Mental training and race strategy courses'
+        ];
+      case 'profile':
+        return [
+          'Comprehensive running history and statistics dashboard',
+          'Achievement badges and milestone tracking',
+          'Personal records and progress visualization',
+          'Goal setting and progress tracking',
+          'Share achievements on social media'
+        ];
+      case 'settings':
+        return [
+          'Customize app appearance and theme',
+          'Manage notification preferences',
+          'Connect and sync with other fitness apps',
+          'Adjust voice coach settings and preferences',
+          'Backup and restore your running data'
+        ];
+      case 'sensors':
+        return [
+          'Connect heart rate monitors and chest straps',
+          'Pair with foot pods for improved running metrics',
+          'Integration with smart watches and fitness trackers',
+          'Support for Bluetooth and ANT+ devices',
+          'Calibration tools for improved accuracy'
+        ];
+      default:
+        return [
+          'Feature 1',
+          'Feature 2',
+          'Feature 3',
+          'Feature 4',
+          'Feature 5',
+        ];
     }
   }
 }

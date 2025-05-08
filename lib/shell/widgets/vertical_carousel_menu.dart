@@ -7,7 +7,7 @@ class VerticalCarouselMenu extends StatefulWidget {
   final int initialIndex;
 
   const VerticalCarouselMenu({
-    super.key, // Fixed: Using super parameter
+    super.key,
     required this.menuItems,
     required this.onItemSelected,
     this.initialIndex = 0,
@@ -18,21 +18,23 @@ class VerticalCarouselMenu extends StatefulWidget {
 }
 
 class _VerticalCarouselMenuState extends State<VerticalCarouselMenu> {
-  late final FixedExtentScrollController _controller;
+  late final PageController _pageController;
   late int _selectedIndex;
-
-  // Removed the unused field
 
   @override
   void initState() {
     super.initState();
     _selectedIndex = widget.initialIndex;
-    _controller = FixedExtentScrollController(initialItem: _selectedIndex);
+    // Initialize PageController with viewportFraction to show 4 items
+    _pageController = PageController(
+      initialPage: _selectedIndex,
+      viewportFraction: 0.25, // Show 4 items at a time
+    );
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -40,67 +42,70 @@ class _VerticalCarouselMenuState extends State<VerticalCarouselMenu> {
   Widget build(BuildContext context) {
     return SizedBox(
       width: 80,
-      child: NotificationListener<ScrollNotification>(
-        onNotification: _handleScrollNotification,
-        child: ListWheelScrollView.useDelegate(
-          controller: _controller,
-          itemExtent: 80, // Height of each item
-          perspective: 0.005,
-          diameterRatio: 2.0,
-          physics: const FixedExtentScrollPhysics(),
-          onSelectedItemChanged: _onItemChanged,
-          childDelegate: ListWheelChildLoopingListDelegate(
-            children:
-                widget.menuItems.map((item) => _buildMenuItem(item)).toList(),
-          ),
-          // Configure to show approximately 4 items at a time
-          magnification: 1.1, // Slightly enlarges the selected item
-          useMagnifier: true,
-          overAndUnderCenterOpacity: 0.7, // Fades the non-selected items
+      child: RotatedBox(
+        quarterTurns: 1, // Rotate to make horizontal PageView appear vertical
+        child: PageView.builder(
+          controller: _pageController,
+          itemCount: widget.menuItems.length *
+              3, // Triple the items for infinite scrolling effect
+          scrollDirection:
+              Axis.horizontal, // This becomes vertical after rotation
+          onPageChanged: _onItemChanged,
+          padEnds: false,
+          physics: const BouncingScrollPhysics(),
+          itemBuilder: (context, index) {
+            // Calculate actual index with wrapping for infinite scrolling effect
+            final wrappedIndex = index % widget.menuItems.length;
+            return _buildMenuItem(
+                widget.menuItems[wrappedIndex], wrappedIndex == _selectedIndex);
+          },
         ),
       ),
     );
   }
 
-  Widget _buildMenuItem(MenuItemData item) {
-    final isSelected = widget.menuItems[_selectedIndex].id == item.id;
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: isSelected
-            ? item.color.withAlpha(230) // ~0.9 opacity
-            : item.color.withAlpha(153), // ~0.6 opacity
-        boxShadow: [
-          BoxShadow(
-            color: isSelected
-                ? item.color.withAlpha(153) // ~0.6 opacity
-                : item.color.withAlpha(77), // ~0.3 opacity
-            blurRadius: isSelected ? 12 : 8,
-            spreadRadius: isSelected ? 2 : 0,
+  Widget _buildMenuItem(MenuItemData item, bool isSelected) {
+    return RotatedBox(
+      quarterTurns: 3, // Rotate back to normal orientation
+      child: Container(
+        margin: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color:
+              item.color.withAlpha(230), // All buttons bright and highlighted
+          boxShadow: [
+            BoxShadow(
+              color: item.color.withAlpha(153),
+              blurRadius: 10,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Center(
+          child: Icon(
+            item.icon,
+            color: Colors.white,
+            size: 30, // All icons same size
           ),
-        ],
-      ),
-      child: Center(
-        child: Icon(
-          item.icon,
-          color: Colors.white,
-          size: isSelected ? 32 : 26,
         ),
       ),
     );
-  }
-
-  bool _handleScrollNotification(ScrollNotification notification) {
-    // Can be used to handle custom scroll behavior if needed
-    return true;
   }
 
   void _onItemChanged(int index) {
+    final wrappedIndex = index % widget.menuItems.length;
     setState(() {
-      _selectedIndex = index;
+      _selectedIndex = wrappedIndex;
     });
-    widget.onItemSelected(index);
+    widget.onItemSelected(wrappedIndex);
+
+    // Handling infinite scroll behavior
+    if (index == widget.menuItems.length * 2 - 1) {
+      // If we're at the end of the tripled list, jump to the middle set
+      _pageController.jumpToPage(wrappedIndex + widget.menuItems.length);
+    } else if (index == 0) {
+      // If we're at the start, jump to the middle set
+      _pageController.jumpToPage(wrappedIndex + widget.menuItems.length);
+    }
   }
 }
