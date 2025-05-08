@@ -347,7 +347,7 @@ class ActivitySummaryScreen extends StatelessWidget {
                     context: context,
                     label: 'Elevation Gain',
                     value:
-                        activity.elevationGainMeters.toStringAsFixed(0) + ' m',
+                        '${activity.elevationGainMeters.toStringAsFixed(0)} m',
                     icon: Icons.arrow_upward,
                     iconColor: Colors.purple,
                   ),
@@ -359,7 +359,7 @@ class ActivitySummaryScreen extends StatelessWidget {
                     context: context,
                     label: 'Elevation Loss',
                     value:
-                        activity.elevationLossMeters.toStringAsFixed(0) + ' m',
+                        '${activity.elevationLossMeters.toStringAsFixed(0)} m',
                     icon: Icons.arrow_downward,
                     iconColor: Colors.blue,
                   ),
@@ -504,7 +504,11 @@ ${activity.averageHeartRate != null ? '- Avg HR: ${activity.averageHeartRate} bp
 Tracked with Volt Running Tracker
 ''';
 
-    // Use SharePlus instead of Share
-    SharePlus.share(text);
+    // Use SharePlus.instance.share() - this is the correct method for the latest share_plus package
+    SharePlus.instance.share(
+      ShareParams(text: text),
+    );
+    // Share the activity data using the share_plus package
+    // Share.share(text, subject: 'My Activity Summary');
   }
 }

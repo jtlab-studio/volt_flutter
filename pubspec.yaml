@@ -47,13 +47,8 @@ dependencies:
   
   # GPX and Activity Data
   gpx: ^2.2.1
-
-  # Map for activity routes
-  flutter_map: ^5.0.0
-  latlong2: ^0.9.0
   
-  # Modified version of the share package that's more up to date
-  share_plus: ^7.0.0
+
   
   # Utilities
   intl: ^0.20.2
