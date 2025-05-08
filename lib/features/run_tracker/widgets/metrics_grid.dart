@@ -1,4 +1,4 @@
-// lib/features/run_tracker/widgets/metrics_grid.dart - Optimized for space
+// lib/features/run_tracker/widgets/metrics_grid.dart
 import 'package:flutter/material.dart';
 import '../services/tracker_service.dart';
 import '../models/sensor_reading.dart';
@@ -21,6 +21,12 @@ class MetricsGrid extends StatelessWidget {
     final cadence = metrics['cadence'] as int?;
     final elevationGain = metrics['elevationGain'] as double;
     final elevationLoss = metrics['elevationLoss'] as double;
+
+    // Check if we have a current activity with averages
+    final averageHR = metrics['averageHeartRate'] as int?;
+    final averagePower = metrics['averagePower'] as int?;
+    final averageCadence = metrics['averageCadence'] as int?;
+    final averagePace = metrics['averagePace'] as int?;
 
     // Get available height to adjust layout
     final screenHeight = MediaQuery.of(context).size.height;
@@ -63,10 +69,30 @@ class MetricsGrid extends StatelessWidget {
           // Secondary metrics grid - takes most of the space
           Expanded(
             child: isSmallScreen
-                ? _buildCompactMetricsGrid(context, pace, heartRate, power,
-                    cadence, elevationGain, elevationLoss)
-                : _buildStandardMetricsGrid(context, pace, heartRate, power,
-                    cadence, elevationGain, elevationLoss),
+                ? _buildCompactMetricsGrid(
+                    context,
+                    pace,
+                    heartRate,
+                    power,
+                    cadence,
+                    averagePace,
+                    averageHR,
+                    averagePower,
+                    averageCadence,
+                    elevationGain,
+                    elevationLoss)
+                : _buildStandardMetricsGrid(
+                    context,
+                    pace,
+                    heartRate,
+                    power,
+                    cadence,
+                    averagePace,
+                    averageHR,
+                    averagePower,
+                    averageCadence,
+                    elevationGain,
+                    elevationLoss),
           ),
         ],
       ),
@@ -80,6 +106,10 @@ class MetricsGrid extends StatelessWidget {
     int? heartRate,
     int? power,
     int? cadence,
+    int? averagePace,
+    int? averageHR,
+    int? averagePower,
+    int? averageCadence,
     double elevationGain,
     double elevationLoss,
   ) {
@@ -91,27 +121,29 @@ class MetricsGrid extends StatelessWidget {
             children: [
               // Pace (left column, top)
               Expanded(
-                child: _buildMetricCard(
+                child: _buildMetricCardWithAverage(
                   context: context,
-                  value: SensorReading.formatPace(pace),
+                  currentValue: SensorReading.formatPace(pace),
+                  averageValue: averagePace != null
+                      ? SensorReading.formatPace(averagePace)
+                      : null,
                   label: 'PACE',
                   units: 'min/km',
                   icon: Icons.speed,
                   iconColor: Colors.orange,
-                  showTrend: false,
                 ),
               ),
               const SizedBox(width: 12.0), // Reduced spacing
               // Heart Rate (right column, top)
               Expanded(
-                child: _buildMetricCard(
+                child: _buildMetricCardWithAverage(
                   context: context,
-                  value: heartRate?.toString() ?? '--',
+                  currentValue: heartRate?.toString() ?? '--',
+                  averageValue: averageHR?.toString(),
                   label: 'HEART RATE',
                   units: 'bpm',
                   icon: Icons.favorite,
                   iconColor: Colors.red,
-                  showTrend: false,
                 ),
               ),
             ],
@@ -124,27 +156,27 @@ class MetricsGrid extends StatelessWidget {
             children: [
               // Power (left column, bottom)
               Expanded(
-                child: _buildMetricCard(
+                child: _buildMetricCardWithAverage(
                   context: context,
-                  value: power?.toString() ?? '--',
+                  currentValue: power?.toString() ?? '--',
+                  averageValue: averagePower?.toString(),
                   label: 'POWER',
                   units: 'W',
                   icon: Icons.bolt,
                   iconColor: Colors.yellow,
-                  showTrend: false,
                 ),
               ),
               const SizedBox(width: 12.0), // Reduced spacing
               // Cadence (right column, bottom)
               Expanded(
-                child: _buildMetricCard(
+                child: _buildMetricCardWithAverage(
                   context: context,
-                  value: cadence?.toString() ?? '--',
+                  currentValue: cadence?.toString() ?? '--',
+                  averageValue: averageCadence?.toString(),
                   label: 'CADENCE',
                   units: 'spm',
                   icon: Icons.directions_walk,
                   iconColor: Colors.green,
-                  showTrend: false,
                 ),
               ),
             ],
@@ -168,6 +200,10 @@ class MetricsGrid extends StatelessWidget {
     int? heartRate,
     int? power,
     int? cadence,
+    int? averagePace,
+    int? averageHR,
+    int? averagePower,
+    int? averageCadence,
     double elevationGain,
     double elevationLoss,
   ) {
@@ -184,36 +220,42 @@ class MetricsGrid extends StatelessWidget {
             physics: const NeverScrollableScrollPhysics(),
             children: [
               // Pace
-              _buildCompactMetricCard(
+              _buildCompactMetricCardWithAverage(
                 context: context,
-                value: SensorReading.formatPace(pace),
+                currentValue: SensorReading.formatPace(pace),
+                averageValue: averagePace != null
+                    ? SensorReading.formatPace(averagePace)
+                    : null,
                 label: 'PACE',
                 units: 'min/km',
                 icon: Icons.speed,
                 iconColor: Colors.orange,
               ),
               // Heart Rate
-              _buildCompactMetricCard(
+              _buildCompactMetricCardWithAverage(
                 context: context,
-                value: heartRate?.toString() ?? '--',
+                currentValue: heartRate?.toString() ?? '--',
+                averageValue: averageHR?.toString(),
                 label: 'HR',
                 units: 'bpm',
                 icon: Icons.favorite,
                 iconColor: Colors.red,
               ),
               // Power
-              _buildCompactMetricCard(
+              _buildCompactMetricCardWithAverage(
                 context: context,
-                value: power?.toString() ?? '--',
+                currentValue: power?.toString() ?? '--',
+                averageValue: averagePower?.toString(),
                 label: 'POWER',
                 units: 'W',
                 icon: Icons.bolt,
                 iconColor: Colors.yellow,
               ),
               // Cadence
-              _buildCompactMetricCard(
+              _buildCompactMetricCardWithAverage(
                 context: context,
-                value: cadence?.toString() ?? '--',
+                currentValue: cadence?.toString() ?? '--',
+                averageValue: averageCadence?.toString(),
                 label: 'CADENCE',
                 units: 'spm',
                 icon: Icons.directions_walk,
@@ -259,7 +301,7 @@ class MetricsGrid extends StatelessWidget {
               size:
                   isSmallScreen ? 20.0 : 24.0, // Smaller icon on small screens
             ),
-            const SizedBox(height: 4.0), // Minimum spacing
+            const SizedBox(height: 4.0), // Reduced spacing
             Text(
               value,
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
@@ -270,7 +312,7 @@ class MetricsGrid extends StatelessWidget {
                         : null, // Smaller text on small screens
                   ),
             ),
-            const SizedBox(height: 2.0), // Minimum spacing
+            const SizedBox(height: 2.0), // Reduced spacing
             Text(
               label,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -288,17 +330,15 @@ class MetricsGrid extends StatelessWidget {
     );
   }
 
-  // Standard metric card
-  Widget _buildMetricCard({
+  // Metric card that shows both current and average values
+  Widget _buildMetricCardWithAverage({
     required BuildContext context,
-    required String value,
+    required String currentValue,
+    String? averageValue,
     required String label,
     required String units,
     required IconData icon,
     required Color iconColor,
-    bool showTrend = false,
-    IconData? trendIcon,
-    Color? trendColor,
   }) {
     return Card(
       elevation: 4.0,
@@ -327,20 +367,20 @@ class MetricsGrid extends StatelessWidget {
                 Icon(
                   icon,
                   color: iconColor,
-                  size: 20.0,
+                  size: 18.0, // Smaller size to save space
                 ),
               ],
             ),
 
             const Spacer(),
 
-            // Value and units
+            // Current value
             Row(
               crossAxisAlignment: CrossAxisAlignment.baseline,
               textBaseline: TextBaseline.alphabetic,
               children: [
                 Text(
-                  value,
+                  currentValue,
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -353,29 +393,47 @@ class MetricsGrid extends StatelessWidget {
                         color: Colors.grey[400],
                       ),
                 ),
-
-                // Show trend if requested
-                if (showTrend && trendIcon != null)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8.0),
-                    child: Icon(
-                      trendIcon,
-                      color: trendColor,
-                      size: 16.0,
-                    ),
-                  ),
               ],
             ),
+
+            // Average value (if available)
+            if (averageValue != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      'AVG:',
+                      style: TextStyle(
+                        fontSize: 10.0,
+                        color: Colors.grey[500],
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 4.0),
+                    Text(
+                      averageValue,
+                      style: TextStyle(
+                        fontSize: 14.0,
+                        color: Colors.grey[300],
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
     );
   }
 
-  // Compact metric card for smaller screens
-  Widget _buildCompactMetricCard({
+  // Compact metric card with average for smaller screens
+  Widget _buildCompactMetricCardWithAverage({
     required BuildContext context,
-    required String value,
+    required String currentValue,
+    String? averageValue,
     required String label,
     required String units,
     required IconData icon,
@@ -400,7 +458,7 @@ class MetricsGrid extends StatelessWidget {
                 Icon(
                   icon,
                   color: iconColor,
-                  size: 14.0, // Very small icon
+                  size: 12.0, // Very small icon
                 ),
                 const SizedBox(width: 4.0),
                 Text(
@@ -413,23 +471,48 @@ class MetricsGrid extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 4.0),
+            const SizedBox(height: 2.0),
             // Value and units
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 18.0, // Smaller value text
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  currentValue,
+                  style: const TextStyle(
+                    fontSize: 16.0, // Smaller value text
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  ' $units',
+                  style: TextStyle(
+                    fontSize: 9.0, // Even smaller unit text
+                    color: Colors.grey[500],
+                  ),
+                ),
+              ],
             ),
-            Text(
-              units,
-              style: TextStyle(
-                fontSize: 10.0, // Smaller unit text
-                color: Colors.grey[500],
+            // Average value if available
+            if (averageValue != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'AVG: $averageValue',
+                      style: TextStyle(
+                        fontSize: 9.0, // Very small average text
+                        color: Colors.grey[400],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
           ],
         ),
       ),

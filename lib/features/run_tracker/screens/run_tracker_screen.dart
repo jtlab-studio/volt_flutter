@@ -22,11 +22,14 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
     with WidgetsBindingObserver {
   // Flag to show modal when initializing
   bool _isInitializing = true;
+  bool _buttonPressed = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // Automatically connect to sensors as soon as the screen is opened
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _prepareActivity();
     });
@@ -40,9 +43,9 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
 
     if (state == AppLifecycleState.resumed) {
       // App is in the foreground
-      // Check if we're tracking and reconnect if needed
-      if (trackerService.isTracking) {
-        // This will be handled by the tracker service
+      // Auto-reconnect to sensors when returning to the app
+      if (trackerService.isTracking || _isInitializing) {
+        _prepareActivity();
       }
     } else if (state == AppLifecycleState.paused) {
       // App is in the background
@@ -78,6 +81,12 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
     if (mounted) {
       setState(() {
         _isInitializing = false;
+
+        // If start button was pressed while initializing, start the activity now
+        if (_buttonPressed) {
+          _buttonPressed = false;
+          _startActivity(); // Auto-start after initialization completes
+        }
       });
     }
   }
@@ -86,10 +95,23 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
   Future<void> _startActivity() async {
     final trackerService = ref.read(trackerServiceProvider);
 
+    // If still initializing, set the flag and return
+    if (_isInitializing) {
+      setState(() {
+        _buttonPressed = true;
+      });
+      return;
+    }
+
     // Vibrate to indicate start
     Vibration.vibrate(duration: 200);
 
     await trackerService.startActivity();
+
+    // Explicitly notify UI that we've started
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   // Pause activity
@@ -102,6 +124,11 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
     Vibration.vibrate(duration: 100);
 
     await trackerService.pauseActivity();
+
+    // Explicitly update UI
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   // Resume activity
@@ -112,6 +139,11 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
     Vibration.vibrate(duration: 100);
 
     await trackerService.resumeActivity();
+
+    // Explicitly update UI
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   // End activity
@@ -189,6 +221,9 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
     final trackerState = ref.watch(trackerStateProvider);
     final metrics = ref.watch(currentMetricsProvider);
 
+    // Detect if the timer has started or not
+    final bool timerStarted = metrics['duration'] > 0;
+
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
@@ -219,6 +254,7 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
               // Activity controls at the bottom
               ActivityControls(
                 state: trackerState,
+                timerStarted: timerStarted, // Pass the timer state
                 onStart: _startActivity,
                 onPause: _pauseActivity,
                 onResume: _resumeActivity,

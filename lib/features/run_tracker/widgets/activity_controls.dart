@@ -4,6 +4,7 @@ import '../services/tracker_service.dart';
 
 class ActivityControls extends StatelessWidget {
   final TrackerState state;
+  final bool timerStarted; // Add this to track if timer has started
   final VoidCallback onStart;
   final VoidCallback onPause;
   final VoidCallback onResume;
@@ -13,6 +14,7 @@ class ActivityControls extends StatelessWidget {
   const ActivityControls({
     super.key,
     required this.state,
+    this.timerStarted = false, // Default to false
     required this.onStart,
     required this.onPause,
     required this.onResume,
@@ -42,7 +44,13 @@ class ActivityControls extends StatelessWidget {
 
   // Build different controls based on tracker state
   Widget _buildControlsForState(BuildContext context) {
-    switch (state) {
+    // Override the visual state if timer hasn't started but it should be active
+    TrackerState visualState = state;
+    if (state == TrackerState.active && !timerStarted) {
+      visualState = TrackerState.idle; // Show start button instead
+    }
+
+    switch (visualState) {
       case TrackerState.idle:
       case TrackerState.preparing:
         return _buildStartControls();
@@ -53,7 +61,6 @@ class ActivityControls extends StatelessWidget {
       case TrackerState.stopped:
       case TrackerState.error:
         return _buildErrorControls();
-      // Removed default case since all enum values are handled
     }
   }
 
@@ -62,9 +69,9 @@ class ActivityControls extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Start button
+        // Start button - Now always enabled
         _buildControlButton(
-          onPressed: state == TrackerState.preparing ? null : onStart,
+          onPressed: onStart,
           icon: Icons.play_arrow,
           label: 'START',
           color: Colors.green,
