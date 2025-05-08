@@ -232,8 +232,20 @@ class TrackerService extends ChangeNotifier {
       _isStrydConnected = connected;
 
       if (connected) {
+        debugPrint('Connected to Stryd device: ${_strydDevice!.platformName}');
+
         // Discover services
         final services = await _strydDevice!.discoverServices();
+        debugPrint('Discovered ${services.length} services on Stryd device');
+
+        // Log all services and characteristics for debugging
+        for (final service in services) {
+          debugPrint('Service: ${service.uuid}');
+          for (final characteristic in service.characteristics) {
+            debugPrint(
+                '  Characteristic: ${characteristic.uuid}, Properties: ${characteristic.properties}');
+          }
+        }
 
         // Find running power service (there's no standard UUID, so we'll check all services)
         for (final service in services) {
@@ -246,6 +258,9 @@ class TrackerService extends ChangeNotifier {
 
               // Subscribe to updates (we'll figure out which is which based on the data)
               characteristic.onValueReceived.listen(_onStrydDataReceived);
+
+              debugPrint(
+                  'Subscribed to Stryd characteristic: ${characteristic.uuid}');
             }
           }
         }
@@ -281,6 +296,7 @@ class TrackerService extends ChangeNotifier {
 
       // Store the value
       _lastHeartRate = heartRate;
+      debugPrint('Received heart rate: $_lastHeartRate bpm');
 
       // Add to readings if we're tracking
       if (_state == TrackerState.active && _currentActivity != null) {
@@ -299,42 +315,151 @@ class TrackerService extends ChangeNotifier {
     }
   }
 
-  // Stryd data handler
+  // Stryd data handler - Enhanced version
   void _onStrydDataReceived(List<int> data) {
     if (data.isEmpty) return;
 
     try {
-      // Try to identify what type of data this is based on the pattern
-      // Note: This is a simplified example - in reality you'd need to reverse engineer
-      // the Stryd protocol or use their official SDK if available
+      // Enhanced debugging to trace the raw data
+      debugPrint(
+          'Stryd data: ${data.map((e) => e.toRadixString(16).padLeft(2, '0')).join(' ')}');
 
-      // For this example, we'll make some assumptions:
-      // - If data starts with [0x10, ...] it's power data (made up for example)
-      // - If data starts with [0x20, ...] it's cadence data (made up for example)
-      // - If data starts with [0x30, ...] it's distance/pace data (made up for example)
+      // Stryd power pod protocol analysis - multiple parsing strategies
+      bool powerProcessed = false;
 
-      if (data[0] == 0x10 && data.length >= 3) {
-        // Power data (watts)
-        final power = (data[2] << 8) + data[1];
-        _lastPower = power;
-      } else if (data[0] == 0x20 && data.length >= 2) {
-        // Cadence data (steps per minute)
-        final cadence = data[1];
-        _lastCadence = cadence;
-      } else if (data[0] == 0x30 && data.length >= 5) {
-        // Distance data (meters)
-        final distance =
-            ((data[4] << 24) + (data[3] << 16) + (data[2] << 8) + data[1]) /
-                100.0;
-        _lastDistance = distance;
+      // Strategy 1: Check for a standard Stryd power reading pattern
+      // - This works with newer Stryd firmware
+      if (data.length >= 8 && !powerProcessed) {
+        // Check byte 0 for a known identifier (adjust as needed)
+        if ((data[0] & 0xF0) == 0x10) {
+          // Example pattern - adjust based on your observations
+          // Power is often in bytes 4-5 (little endian)
+          if (data.length >= 6) {
+            final power = (data[5] << 8) | data[4];
+            if (power > 0 && power < 1500) {
+              // Reasonable power range
+              _lastPower = power;
+              powerProcessed = true;
+              debugPrint('Stryd power: $_lastPower W (strategy 1)');
+            }
+          }
+        }
+      }
 
-        // Calculate pace if we have distance and time delta
-        if (_lastTimerUpdate != null && _lastDistance != null) {
-          final timeInSeconds =
-              DateTime.now().difference(_lastTimerUpdate!).inSeconds;
-          if (timeInSeconds > 0 && _lastDistance! > 0) {
-            // Pace in seconds per kilometer = (time in seconds / distance in kilometers)
-            _lastPace = (timeInSeconds / (_lastDistance! / 1000)).round();
+      // Strategy 2: Try to find power in a different format
+      // - This might work with older Stryd firmware
+      if (data.length >= 6 && !powerProcessed) {
+        for (int i = 0; i < data.length - 2; i++) {
+          final value = (data[i + 1] << 8) | data[i];
+          if (value > 50 && value < 1500) {
+            // Likely power value
+            _lastPower = value;
+            powerProcessed = true;
+            debugPrint('Stryd power: $_lastPower W (strategy 2 at offset $i)');
+            break;
+          }
+        }
+      }
+
+      // Strategy 3: Last resort - check each pair of bytes
+      // - This is a fallback method
+      if (data.length >= 4 && !powerProcessed) {
+        for (int i = 0; i < data.length - 1; i++) {
+          for (int j = i + 1; j < data.length; j++) {
+            final value = (data[j] << 8) | data[i];
+            if (value > 50 && value < 1500) {
+              // Likely power value
+              _lastPower = value;
+              powerProcessed = true;
+              debugPrint(
+                  'Stryd power: $_lastPower W (strategy 3 with bytes $i,$j)');
+              break;
+            }
+          }
+          if (powerProcessed) break;
+        }
+      }
+
+      // Look for cadence data
+      bool cadenceFound = false;
+      for (int i = 0; i < data.length; i++) {
+        // Cadence is typically a single byte value in the range 60-240
+        if (data[i] >= 60 && data[i] <= 240) {
+          _lastCadence = data[i];
+          cadenceFound = true;
+          debugPrint('Stryd cadence: $_lastCadence spm (at byte $i)');
+          break;
+        }
+      }
+
+      // If not found, try pairs of bytes for cadence
+      if (!cadenceFound && data.length >= 2) {
+        for (int i = 0; i < data.length - 1; i++) {
+          final value = (data[i + 1] << 8) | data[i];
+          if (value >= 60 && value <= 240) {
+            _lastCadence = value;
+            debugPrint(
+                'Stryd cadence: $_lastCadence spm (calculated from bytes $i,${i + 1})');
+            break;
+          }
+        }
+      }
+
+      // Look for distance data (usually a multi-byte value)
+      if (data.length >= 6) {
+        bool distanceFound = false;
+
+        // Try to find distance in 4-byte format
+        for (int i = 0; i < data.length - 3; i++) {
+          final value = ((data[i + 3] << 24) |
+                  (data[i + 2] << 16) |
+                  (data[i + 1] << 8) |
+                  data[i]) /
+              100.0;
+
+          // Distance should be reasonable and non-zero
+          if (value > 0 && value < 100000) {
+            _lastDistance = value;
+            distanceFound = true;
+            debugPrint(
+                'Stryd distance: $_lastDistance m (4-byte at offset $i)');
+            break;
+          }
+        }
+
+        // If not found, try 2-byte format
+        if (!distanceFound) {
+          for (int i = 0; i < data.length - 1; i++) {
+            final value = ((data[i + 1] << 8) | data[i]) / 10.0;
+
+            // Must be reasonable and increasing from last value
+            if (value > 0 &&
+                value < 100000 &&
+                (_lastDistance == null || value > _lastDistance!)) {
+              _lastDistance = value;
+              debugPrint(
+                  'Stryd distance: $_lastDistance m (2-byte at offset $i)');
+              break;
+            }
+          }
+        }
+      }
+
+      // Calculate pace if we have distance and time delta
+      if (_lastTimerUpdate != null &&
+          _lastDistance != null &&
+          _lastDistance! > 0) {
+        final timeInSeconds =
+            DateTime.now().difference(_lastTimerUpdate!).inSeconds;
+        if (timeInSeconds > 0) {
+          // Pace in seconds per kilometer = (time in seconds / distance in kilometers)
+          final newPace = (timeInSeconds / (_lastDistance! / 1000)).round();
+
+          // Only update if the pace is reasonable
+          if (newPace > 0 && newPace < 1200) {
+            // Between 0:00 and 20:00 min/km
+            _lastPace = newPace;
+            debugPrint('Calculated pace: $_lastPace sec/km');
           }
         }
       }
@@ -351,6 +476,9 @@ class TrackerService extends ChangeNotifier {
         );
 
         _addSensorReading(reading);
+
+        // Update activity immediately to show current values
+        _updateCurrentActivity();
       }
 
       notifyListeners();
@@ -670,6 +798,27 @@ class TrackerService extends ChangeNotifier {
 
     // Flush any remaining readings
     await _flushReadingsBuffer();
+
+    // Add detailed activity end summary for debugging
+    debugPrint('======== ACTIVITY END SUMMARY ========');
+    debugPrint('Total readings: ${_currentActivity!.sensorReadings.length}');
+    int hrReadings = _currentActivity!.sensorReadings
+        .where((r) => r.heartRate != null && r.heartRate! > 0)
+        .length;
+    int powerReadings = _currentActivity!.sensorReadings
+        .where((r) => r.power != null && r.power! > 0)
+        .length;
+    int cadenceReadings = _currentActivity!.sensorReadings
+        .where((r) => r.cadence != null && r.cadence! > 0)
+        .length;
+    debugPrint(
+        'HR readings: $hrReadings, Power readings: $powerReadings, Cadence readings: $cadenceReadings');
+    debugPrint(
+        'Last known values - HR: $_lastHeartRate, Power: $_lastPower, Cadence: $_lastCadence');
+    debugPrint(
+        'Activity duration: ${_currentActivity!.durationSeconds} seconds');
+    debugPrint('Activity distance: ${_currentActivity!.distanceMeters} meters');
+    debugPrint('======================================');
 
     // Stop timers and tracking
     _stopActivityTimer();

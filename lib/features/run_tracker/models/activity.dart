@@ -140,9 +140,15 @@ class Activity {
     );
   }
 
-  /// Calculate average values from sensor readings
+  /// Calculate average values from sensor readings - Enhanced Version
   void calculateAverages() {
-    if (sensorReadings.isEmpty) return;
+    if (sensorReadings.isEmpty) {
+      debugPrint('Activity.calculateAverages: No sensor readings available');
+      return;
+    }
+
+    debugPrint(
+        'Activity.calculateAverages: Processing ${sensorReadings.length} readings');
 
     int totalHeartRate = 0;
     int maxHr = 0;
@@ -155,6 +161,14 @@ class Activity {
     int totalCadence = 0;
     int maxCad = 0;
     int validCadenceReadings = 0;
+
+    // Sample a few readings to see what data we have
+    debugPrint('Activity.calculateAverages: First 3 readings sample:');
+    for (int i = 0; i < sensorReadings.length && i < 3; i++) {
+      final r = sensorReadings[i];
+      debugPrint(
+          '  Reading $i: HR=${r.heartRate}, Power=${r.power}, Cadence=${r.cadence}, Source=${r.source}');
+    }
 
     // Calculate sums for averages
     for (final reading in sensorReadings) {
@@ -186,28 +200,60 @@ class Activity {
       }
     }
 
-    // Calculate averages
+    // Debug logs for troubleshooting - Fixed string concatenation
+    debugPrint('Activity.calculateAverages: Valid readings counts - '
+        'HR: $validHrReadings/$totalHeartRate, '
+        'Power: $validPowerReadings/$totalPower, '
+        'Cadence: $validCadenceReadings/$totalCadence');
+
+    // Calculate heart rate averages
     if (validHrReadings > 0) {
       averageHeartRate = (totalHeartRate / validHrReadings).round();
       maxHeartRate = maxHr;
+      debugPrint(
+          'Activity.calculateAverages: Set Avg HR=$averageHeartRate, Max HR=$maxHeartRate');
+    } else {
+      debugPrint('Activity.calculateAverages: No valid heart rate readings');
     }
 
+    // Calculate power averages
     if (validPowerReadings > 0) {
       averagePower = (totalPower / validPowerReadings).round();
       maxPower = maxPwr;
+      debugPrint(
+          'Activity.calculateAverages: Set Avg Power=$averagePower, Max Power=$maxPower');
+    } else {
+      debugPrint('Activity.calculateAverages: No valid power readings');
     }
 
+    // Calculate cadence averages
     if (validCadenceReadings > 0) {
       averageCadence = (totalCadence / validCadenceReadings).round();
       maxCadence = maxCad;
+      debugPrint(
+          'Activity.calculateAverages: Set Avg Cadence=$averageCadence, Max Cadence=$maxCadence');
+    } else {
+      debugPrint('Activity.calculateAverages: No valid cadence readings');
     }
 
-    // Calculate average pace if we have distance and duration
+    // Calculate average pace
     if (distanceMeters > 0 && durationSeconds > 0) {
-      // Convert to seconds per km
       final distanceKm = distanceMeters / 1000;
       final paceSecondsPerKm = (durationSeconds / distanceKm).round();
-      averagePaceSecondsPerKm = paceSecondsPerKm;
+
+      // Only set if the calculated pace is reasonable
+      if (paceSecondsPerKm > 0 && paceSecondsPerKm < 1200) {
+        // Between 0:00 and 20:00 min/km
+        averagePaceSecondsPerKm = paceSecondsPerKm;
+        debugPrint(
+            'Activity.calculateAverages: Set Avg Pace=$averagePaceSecondsPerKm sec/km');
+      } else {
+        debugPrint(
+            'Activity.calculateAverages: Calculated pace $paceSecondsPerKm sec/km is not reasonable');
+      }
+    } else {
+      debugPrint(
+          'Activity.calculateAverages: Cannot calculate pace - distance=$distanceMeters, duration=$durationSeconds');
     }
   }
 

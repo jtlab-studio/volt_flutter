@@ -32,14 +32,11 @@ class DatabaseService {
     // Get encryption key but don't use it yet (for future implementation)
     await _getOrCreateEncryptionKey();
 
+    // Removed the onConfigure callback to avoid WAL mode error on Android
     return await openDatabase(
       dbPath,
       version: 1,
       onCreate: _createDb,
-      // Enable WAL mode for better performance
-      onConfigure: (db) async {
-        await db.execute('PRAGMA journal_mode = WAL');
-      },
     );
   }
 
