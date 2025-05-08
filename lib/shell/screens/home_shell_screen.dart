@@ -1,9 +1,16 @@
+// lib/shell/screens/home_shell_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/menu_item_data.dart';
 import '../widgets/vertical_carousel_menu.dart';
 import '../../core/constants/app_constants.dart';
 import '../../features/sensors/screens/sensors_screen.dart';
+import '../../features/run_tracker/screens/run_tracker_screen.dart';
+import '../../features/academy/screens/academy_screen.dart';
+import '../../features/profile/screens/profile_screen.dart';
+import '../../features/race_prep/screens/race_prep_screen.dart';
+import '../../features/route_finder/screens/route_finder_screen.dart';
+import '../../features/settings/screens/settings_screen.dart';
 
 class HomeShellScreen extends ConsumerStatefulWidget {
   const HomeShellScreen({super.key});
@@ -52,6 +59,9 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
         color: Colors.teal),
   ];
 
+  // Current selected tab index for bottom navigation
+  int _currentTabIndex = 0;
+
   // Fixed: Made _mainContent final
   final Widget _mainContent = const Center(
     child: Text(
@@ -74,22 +84,40 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
         );
         break;
       case 'run':
-        _showModuleMessage('Run Tracker');
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const RunTrackerScreen()),
+        );
         break;
       case 'routes':
-        _showModuleMessage('Local Route Finder');
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const RouteFinderScreen()),
+        );
         break;
       case 'race':
-        _showModuleMessage('Race Prep');
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const RacePrepScreen()),
+        );
         break;
       case 'academy':
-        _showModuleMessage('Academy');
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const AcademyScreen()),
+        );
         break;
       case 'profile':
-        _showModuleMessage('Profile');
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const ProfileScreen()),
+        );
         break;
       case 'settings':
-        _showModuleMessage('Settings');
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const SettingsScreen()),
+        );
         break;
     }
   }
@@ -101,6 +129,50 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
         duration: const Duration(seconds: 1),
       ),
     );
+  }
+
+  // Handle tab change in bottom navigation
+  void _onTabTapped(int index) {
+    setState(() {
+      _currentTabIndex = index;
+    });
+
+    // Show message for tabs other than home
+    if (index != 0) {
+      String tabName = '';
+      switch (index) {
+        case 1:
+          tabName = 'Favorites';
+          break;
+        case 2:
+          tabName = 'History';
+          break;
+        case 3:
+          tabName = 'Support';
+          break;
+      }
+      _showModuleMessage(tabName);
+    }
+  }
+
+  // Get the active content based on selected tab
+  Widget _getTabContent() {
+    // For now, only home tab has content
+    // In a full implementation, you would return different screens based on index
+    switch (_currentTabIndex) {
+      case 0:
+        return _mainContent;
+      default:
+        return Center(
+          child: Text(
+            'Tab $_currentTabIndex Content Coming Soon',
+            style: const TextStyle(
+              fontSize: 18,
+              color: Colors.white70,
+            ),
+          ),
+        );
+    }
   }
 
   @override
@@ -124,7 +196,7 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
             child: Padding(
               padding:
                   const EdgeInsets.only(right: 80.0), // Space for the carousel
-              child: _mainContent,
+              child: _getTabContent(),
             ),
           ),
 
@@ -162,10 +234,10 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _buildFooterButton(Icons.home, 'Home'),
-                  _buildFooterButton(Icons.favorite_border, 'Favorites'),
-                  _buildFooterButton(Icons.history, 'History'),
-                  _buildFooterButton(Icons.support_agent, 'Support'),
+                  _buildFooterButton(Icons.home, 'Home', 0),
+                  _buildFooterButton(Icons.favorite_border, 'Favorites', 1),
+                  _buildFooterButton(Icons.history, 'History', 2),
+                  _buildFooterButton(Icons.support_agent, 'Support', 3),
                 ],
               ),
             ),
@@ -175,24 +247,138 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
     );
   }
 
-  Widget _buildFooterButton(IconData icon, String label) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          icon,
-          color: Colors.grey[400],
-          size: 24,
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[400],
+  Widget _buildFooterButton(IconData icon, String label, int index) {
+    final isSelected = _currentTabIndex == index;
+
+    return GestureDetector(
+      onTap: () => _onTabTapped(index),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            color: isSelected ? Colors.blue : Colors.grey[400],
+            size: 24,
           ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: isSelected ? Colors.blue : Colors.grey[400],
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Method to update tab programmatically (useful for deep linking)
+  void setCurrentTab(int index) {
+    if (mounted) {
+      setState(() {
+        _currentTabIndex = index;
+      });
+    }
+  }
+
+  // Method to show quick actions - can be called from other parts of the app
+  void showQuickActions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.black87,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Quick Actions',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildQuickActionButton(
+                  icon: Icons.directions_run,
+                  label: 'New Run',
+                  color: Colors.blue,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _navigateToModule('run');
+                  },
+                ),
+                _buildQuickActionButton(
+                  icon: Icons.bluetooth,
+                  label: 'Sensors',
+                  color: Colors.teal,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _navigateToModule('sensors');
+                  },
+                ),
+                _buildQuickActionButton(
+                  icon: Icons.settings,
+                  label: 'Settings',
+                  color: Colors.blueGrey,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _navigateToModule('settings');
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+          ],
         ),
-      ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: Colors.black.withAlpha(128), // 0.5 * 255 = 128
+              shape: BoxShape.circle,
+              border: Border.all(color: color, width: 2),
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 30,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
