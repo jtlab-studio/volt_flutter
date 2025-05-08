@@ -431,10 +431,10 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen> {
           FloatingActionButton(
             onPressed: _isScanning ? null : _startScan,
             backgroundColor: _isScanning ? Colors.grey : Colors.teal,
+            heroTag: 'scan',
             child: _isScanning
                 ? const CircularProgressIndicator(color: Colors.white)
                 : const Icon(Icons.bluetooth_searching),
-            heroTag: 'scan',
           ),
         ],
       ),

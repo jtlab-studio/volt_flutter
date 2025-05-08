@@ -8,16 +8,16 @@ plugins {
 android {
     namespace = "com.example.volt_flutter"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "27.0.12077973"  // Set explicit NDK version
+    ndkVersion = "27.0.12077973"  // Keep this
 
     compileOptions {
-        // Updated to Java 17
+        // Keep Java 17
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        // Updated to Java 17
+        // Keep Java 17
         jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
