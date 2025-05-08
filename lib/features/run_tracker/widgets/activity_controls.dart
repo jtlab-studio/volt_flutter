@@ -4,7 +4,7 @@ import '../services/tracker_service.dart';
 
 class ActivityControls extends StatelessWidget {
   final TrackerState state;
-  final bool timerStarted; // Add this to track if timer has started
+  final bool timerStarted;
   final VoidCallback onStart;
   final VoidCallback onPause;
   final VoidCallback onResume;
@@ -14,7 +14,7 @@ class ActivityControls extends StatelessWidget {
   const ActivityControls({
     super.key,
     required this.state,
-    this.timerStarted = false, // Default to false
+    this.timerStarted = false,
     required this.onStart,
     required this.onPause,
     required this.onResume,
@@ -25,8 +25,9 @@ class ActivityControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 100,
-      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+      height: 70, // REDUCED from 100
+      padding: const EdgeInsets.symmetric(
+          horizontal: 24.0, vertical: 8.0), // REDUCED padding
       decoration: BoxDecoration(
         color: Colors.black,
         boxShadow: [
@@ -64,25 +65,25 @@ class ActivityControls extends StatelessWidget {
     }
   }
 
-  // Controls for idle/preparing state
+  // Controls for idle/preparing state - START
   Widget _buildStartControls() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Start button - Now always enabled
+        // Start button
         _buildControlButton(
           onPressed: onStart,
           icon: Icons.play_arrow,
           label: 'START',
           color: Colors.green,
-          size: 64.0,
+          size: 52.0, // REDUCED from 64
           isLoading: state == TrackerState.preparing,
         ),
       ],
     );
   }
 
-  // Controls for active state
+  // Controls for active state - PAUSE/STOP
   Widget _buildActiveControls() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -92,7 +93,7 @@ class ActivityControls extends StatelessWidget {
           onPressed: onDiscard,
           icon: Icons.delete,
           color: Colors.red,
-          size: 48.0,
+          size: 36.0, // REDUCED from 48
           showBackground: false,
         ),
 
@@ -102,7 +103,7 @@ class ActivityControls extends StatelessWidget {
           icon: Icons.pause,
           label: 'PAUSE',
           color: Colors.orange,
-          size: 64.0,
+          size: 52.0, // REDUCED from 64
         ),
 
         // End button (small)
@@ -110,14 +111,14 @@ class ActivityControls extends StatelessWidget {
           onPressed: onStop,
           icon: Icons.stop,
           color: Colors.red,
-          size: 48.0,
+          size: 36.0, // REDUCED from 48
           showBackground: false,
         ),
       ],
     );
   }
 
-  // Controls for paused state
+  // Controls for paused state - RESUME/DISCARD/END
   Widget _buildPausedControls() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -128,7 +129,7 @@ class ActivityControls extends StatelessWidget {
           icon: Icons.delete,
           label: 'DISCARD',
           color: Colors.red,
-          size: 48.0,
+          size: 36.0, // REDUCED from 48
         ),
 
         // Resume button
@@ -137,7 +138,7 @@ class ActivityControls extends StatelessWidget {
           icon: Icons.play_arrow,
           label: 'RESUME',
           color: Colors.green,
-          size: 64.0,
+          size: 52.0, // REDUCED from 64
         ),
 
         // End button
@@ -146,7 +147,7 @@ class ActivityControls extends StatelessWidget {
           icon: Icons.stop,
           label: 'END',
           color: Colors.red,
-          size: 48.0,
+          size: 36.0, // REDUCED from 48
         ),
       ],
     );
@@ -163,13 +164,13 @@ class ActivityControls extends StatelessWidget {
           icon: Icons.refresh,
           label: 'RETRY',
           color: Colors.orange,
-          size: 64.0,
+          size: 52.0, // REDUCED from 64
         ),
       ],
     );
   }
 
-  // Helper to build control buttons
+  // Helper to build control buttons - SIMPLIFIED
   Widget _buildControlButton({
     required VoidCallback? onPressed,
     required IconData icon,
@@ -182,6 +183,7 @@ class ActivityControls extends StatelessWidget {
     // Disabled color
     final disabledColor = Colors.grey;
 
+    // Make a more compact button design
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -228,17 +230,17 @@ class ActivityControls extends StatelessWidget {
           ),
         ),
 
-        // Label
+        // Label - only if there's space
         if (label != null)
           Padding(
-            padding: const EdgeInsets.only(top: 8.0),
+            padding: const EdgeInsets.only(top: 2.0), // REDUCED from 8
             child: Text(
               label,
               style: TextStyle(
                 color: onPressed != null ? Colors.white : disabledColor,
-                fontSize: 12.0,
+                fontSize: 9.0, // REDUCED from 12
                 fontWeight: FontWeight.bold,
-                letterSpacing: 1.0,
+                letterSpacing: 0.5, // REDUCED from 1.0
               ),
             ),
           ),

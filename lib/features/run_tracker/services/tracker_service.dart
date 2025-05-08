@@ -340,10 +340,10 @@ class TrackerService extends ChangeNotifier {
         debugPrint('Stryd cadence (specific pattern): $_lastCadence spm');
       }
 
-      // Pattern 2: Data starting with "32 00 41/42 00..."
+      // Pattern 2: Data starting with "32 00 41/42/43/44 00..."
       else if (data.length >= 3 && data[0] == 0x32) {
         // This is another power and cadence pattern from your device
-        final power = data[2]; // 0x41/0x42 = 65/66 watts
+        final power = data[2]; // 0x41/0x42/0x43/0x44 = 65/66/67/68 watts
         _lastPower = power;
         _lastCadence = power; // Same relationship as in pattern 1
 
@@ -556,17 +556,6 @@ class TrackerService extends ChangeNotifier {
   void _updateCurrentActivity() {
     if (_currentActivity == null) return;
 
-    // Calculate duration
-    if (_lastTimerUpdate != null) {
-      final timeDiff = DateTime.now().difference(_lastTimerUpdate!).inSeconds;
-      if (_state == TrackerState.active) {
-        _currentActivity!.durationSeconds += timeDiff;
-      }
-      _lastTimerUpdate = DateTime.now();
-    } else {
-      _lastTimerUpdate = DateTime.now();
-    }
-
     // Update metrics
     _currentActivity!.distanceMeters = _totalDistanceMeters;
     _currentActivity!.elevationGainMeters = _elevationGainMeters;
@@ -660,8 +649,18 @@ class TrackerService extends ChangeNotifier {
     // Update duration every second
     _activityTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_state == TrackerState.active && _currentActivity != null) {
+        // Directly increment the duration by 1 second each time
+        _currentActivity!.durationSeconds += 1;
+
+        // Update other metrics as well
         _updateCurrentActivity();
+
+        // Notify listeners to update UI
         notifyListeners();
+
+        // Debug timer update
+        debugPrint(
+            'Timer updated: ${_currentActivity!.durationSeconds} seconds');
       }
     });
   }
@@ -720,12 +719,18 @@ class TrackerService extends ChangeNotifier {
     _state = TrackerState.active;
     if (_currentActivity != null) {
       _currentActivity!.status = 'in_progress';
+
+      // Make sure we're starting with fresh duration if this is a new activity
+      if (_currentActivity!.durationSeconds <= 0) {
+        _currentActivity!.durationSeconds = 0;
+      }
     } else {
       // Create a new activity if for some reason we don't have one
       _currentActivity = Activity(
         name: 'Run on ${DateTime.now().toString().substring(0, 16)}',
         startTime: DateTime.now(),
         status: 'in_progress',
+        durationSeconds: 0, // Explicitly set to 0
       );
       await _dbService.insertActivity(_currentActivity!);
     }
@@ -741,6 +746,10 @@ class TrackerService extends ChangeNotifier {
 
     // Save to database
     await _saveCurrentActivity();
+
+    // Debug
+    debugPrint(
+        'Activity started with duration: ${_currentActivity!.durationSeconds}');
   }
 
   // Pause activity tracking

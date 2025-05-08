@@ -43,6 +43,8 @@ final currentMetricsProvider = Provider<Map<String, dynamic>>((ref) {
     'cadence': service.lastCadence,
     'elevationGain': service.elevationGainMeters,
     'elevationLoss': service.elevationLossMeters,
+    // Include the current activity so we can access its average values
+    'currentActivity': service.currentActivity,
   };
 });
 

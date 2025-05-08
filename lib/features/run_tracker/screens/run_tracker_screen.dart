@@ -221,8 +221,9 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
     final trackerState = ref.watch(trackerStateProvider);
     final metrics = ref.watch(currentMetricsProvider);
 
-    // Detect if the timer has started or not
-    final bool timerStarted = metrics['duration'] > 0;
+    // FIXED: Properly detect if the timer has started
+    final bool timerStarted =
+        metrics['duration'] > 0 && trackerState == TrackerState.active;
 
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
@@ -240,26 +241,36 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
       ),
       body: Stack(
         children: [
-          // Main content
+          // Main content - SIMPLIFIED LAYOUT WITH FIXED HEIGHTS
           Column(
             children: [
-              // Sensor status bar
-              const SensorStatusBar(),
+              // Sensor status bar - FIXED HEIGHT
+              const SizedBox(
+                height: 40, // REDUCED from 50
+                child: SensorStatusBar(),
+              ),
 
-              // Metrics grid takes most of the space
-              Expanded(
+              // Metrics grid - CONSTRAINED HEIGHT
+              SizedBox(
+                height: 240, // FIXED HEIGHT - this is critical
                 child: MetricsGrid(metrics: metrics),
               ),
 
-              // Activity controls at the bottom
-              ActivityControls(
-                state: trackerState,
-                timerStarted: timerStarted, // Pass the timer state
-                onStart: _startActivity,
-                onPause: _pauseActivity,
-                onResume: _resumeActivity,
-                onStop: _endActivity,
-                onDiscard: _discardActivity,
+              // Push activity controls to the bottom
+              const Spacer(),
+
+              // Activity controls with fixed height
+              SizedBox(
+                height: 70, // REDUCED from 80
+                child: ActivityControls(
+                  state: trackerState,
+                  timerStarted: timerStarted,
+                  onStart: _startActivity,
+                  onPause: _pauseActivity,
+                  onResume: _resumeActivity,
+                  onStop: _endActivity,
+                  onDiscard: _discardActivity,
+                ),
               ),
 
               // Space for bottom system UI
