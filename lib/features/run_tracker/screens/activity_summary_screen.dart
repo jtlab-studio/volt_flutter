@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:share_plus/share_plus.dart';
+import 'dart:math' as math;
 
 import '../models/activity.dart';
 import '../models/sensor_reading.dart';
@@ -21,7 +22,8 @@ class ActivitySummaryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     // Calculate optimal map dimensions
     final screenHeight = MediaQuery.of(context).size.height;
-    final mapHeight = screenHeight * 0.25; // 25% of screen height for map
+    // Reduce map height to 20% of screen height (was 25%)
+    final mapHeight = screenHeight * 0.2;
 
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
@@ -55,8 +57,8 @@ class ActivitySummaryScreen extends StatelessWidget {
             // Action buttons
             _buildActionButtons(context),
 
-            // Space at bottom
-            SizedBox(height: MediaQuery.of(context).padding.bottom),
+            // Space at bottom for safety
+            SizedBox(height: MediaQuery.of(context).padding.bottom + 10),
           ],
         ),
       ),
@@ -65,11 +67,14 @@ class ActivitySummaryScreen extends StatelessWidget {
 
   // Build activity map with route - IMPROVED
   Widget _buildActivityMap(BuildContext context, double height) {
+    // Reduce height by 50px to move map upwards
+    final adjustedHeight = height - 50;
+
     // Skip map if no route points
     if (activity.routePoints.isEmpty) {
       return Container(
         width: double.infinity,
-        height: height,
+        height: adjustedHeight, // Use adjusted height
         color: Colors.grey[900],
         child: const Center(
           child: Text(
@@ -105,8 +110,8 @@ class ActivitySummaryScreen extends StatelessWidget {
       double lat1 = minLat * (3.14159 / 180.0);
       double lat2 = maxLat * (3.14159 / 180.0);
 
-      double a = dLat * dLat + dLon * dLon * Math.cos(lat1) * Math.cos(lat2);
-      double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      double a = dLat * dLat + dLon * dLon * math.cos(lat1) * math.cos(lat2);
+      double c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
       double distance = earthRadius * c;
 
       // Adjust zoom based on distance
@@ -125,7 +130,7 @@ class ActivitySummaryScreen extends StatelessWidget {
 
     return SizedBox(
       width: double.infinity,
-      height: height,
+      height: adjustedHeight, // Use adjusted height
       child: ClipRRect(
         borderRadius: const BorderRadius.vertical(
           bottom: Radius.circular(12),
@@ -165,16 +170,26 @@ class ActivitySummaryScreen extends StatelessWidget {
     );
   }
 
-  // Calculate center of route for map - UNCHANGED
+  // Calculate center of route for map - FIXED to no longer default to San Francisco
   LatLng _calculateCenter() {
     if (activity.routePoints.isEmpty) {
-      return const LatLng(0, 0); // Default
+      // Default to user's location or a neutral spot - use London instead of San Francisco
+      return const LatLng(51.509865, -0.118092);
     }
 
     // Use center point of route
     if (activity.routePoints.length > 1) {
-      final midIndex = activity.routePoints.length ~/ 2;
-      return activity.routePoints[midIndex];
+      // Calculate the actual center of all points for a better map view
+      double sumLat = 0;
+      double sumLng = 0;
+
+      for (final point in activity.routePoints) {
+        sumLat += point.latitude;
+        sumLng += point.longitude;
+      }
+
+      return LatLng(sumLat / activity.routePoints.length,
+          sumLng / activity.routePoints.length);
     }
 
     // If only one point, return it
@@ -351,7 +366,7 @@ class ActivitySummaryScreen extends StatelessWidget {
     );
   }
 
-  // Build detailed metrics section - UNCHANGED
+  // Build detailed metrics section - UPDATED to show averages
   Widget _buildDetailedMetrics(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 16.0),
@@ -385,6 +400,18 @@ class ActivitySummaryScreen extends StatelessWidget {
                     iconColor: Colors.red,
                   ),
 
+                  // Maximum Heart Rate
+                  if (activity.maxHeartRate != null) ...[
+                    const Divider(color: Colors.grey),
+                    _buildMetricRow(
+                      context: context,
+                      label: 'Heart Rate (max)',
+                      value: '${activity.maxHeartRate} bpm',
+                      icon: Icons.favorite,
+                      iconColor: Colors.redAccent,
+                    ),
+                  ],
+
                   const Divider(color: Colors.grey),
 
                   // Power metrics
@@ -396,6 +423,18 @@ class ActivitySummaryScreen extends StatelessWidget {
                     iconColor: Colors.yellow,
                   ),
 
+                  // Maximum Power
+                  if (activity.maxPower != null) ...[
+                    const Divider(color: Colors.grey),
+                    _buildMetricRow(
+                      context: context,
+                      label: 'Power (max)',
+                      value: '${activity.maxPower} W',
+                      icon: Icons.bolt,
+                      iconColor: Colors.yellowAccent,
+                    ),
+                  ],
+
                   const Divider(color: Colors.grey),
 
                   // Cadence metrics
@@ -405,6 +444,30 @@ class ActivitySummaryScreen extends StatelessWidget {
                     value: '${activity.averageCadence ?? '--'} spm',
                     icon: Icons.directions_walk,
                     iconColor: Colors.green,
+                  ),
+
+                  // Maximum Cadence
+                  if (activity.maxCadence != null) ...[
+                    const Divider(color: Colors.grey),
+                    _buildMetricRow(
+                      context: context,
+                      label: 'Cadence (max)',
+                      value: '${activity.maxCadence} spm',
+                      icon: Icons.directions_walk,
+                      iconColor: Colors.greenAccent,
+                    ),
+                  ],
+
+                  const Divider(color: Colors.grey),
+
+                  // Pace metrics
+                  _buildMetricRow(
+                    context: context,
+                    label: 'Average Pace',
+                    value: SensorReading.formatPace(
+                        activity.averagePaceSecondsPerKm),
+                    icon: Icons.speed,
+                    iconColor: Colors.amber,
                   ),
 
                   const Divider(color: Colors.grey),
@@ -578,9 +641,9 @@ Tracked with Volt Running Tracker
   }
 }
 
-// Math helper for distance calculations
+// Math helper for distance calculations - FIXED with proper import
 class Math {
-  static double cos(double x) => dart.math.cos(x);
-  static double sqrt(double x) => dart.math.sqrt(x);
-  static double atan2(double y, double x) => dart.math.atan2(y, x);
+  static double cos(double x) => math.cos(x);
+  static double sqrt(double x) => math.sqrt(x);
+  static double atan2(double y, double x) => math.atan2(y, x);
 }
