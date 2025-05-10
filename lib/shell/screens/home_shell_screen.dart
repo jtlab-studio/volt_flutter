@@ -1,10 +1,10 @@
-// lib/shell/screens/home_shell_screen.dart
+// Updated import for the enhanced sensors screen
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/menu_item_data.dart';
 import '../widgets/vertical_carousel_menu.dart';
 import '../../core/constants/app_constants.dart';
-import '../../features/sensors/screens/sensors_screen.dart';
+import '../../features/sensors/screens/sensors_screen.dart'; // Updated import
 import '../../features/run_tracker/screens/run_tracker_screen.dart';
 import '../../features/academy/screens/academy_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
@@ -80,7 +80,9 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
       case 'sensors':
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const SensorsScreen()),
+          MaterialPageRoute(
+              builder: (context) =>
+                  const SensorsScreen()), // Updated to use enhanced screen
         );
         break;
       case 'run':
@@ -359,7 +361,7 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
             width: 60,
             height: 60,
             decoration: BoxDecoration(
-              color: Colors.black.withAlpha(128), // 0.5 * 255 = 128
+              color: Colors.black.withAlpha(128),
               shape: BoxShape.circle,
               border: Border.all(color: color, width: 2),
             ),

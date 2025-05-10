@@ -1,6 +1,7 @@
+// lib/features/sensors/screens/sensors_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart' hide BluetoothService;
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 
@@ -22,6 +23,7 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
   List<BluetoothDevice> _connectedDevices = [];
   List<ScanResult> _scanResults = [];
   List<BluetoothDevice> _savedDevices = [];
+  final Map<String, List<BluetoothService>> _deviceServices = {};
   StreamSubscription? _scanSubscription;
 
   // Track connection states for each device
@@ -32,6 +34,51 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
 
   // Bluetooth service instance
   late CustomBluetoothService _bluetoothService;
+
+  // Categories for grouping devices
+  final Map<String, List<ScanResult>> _categorizedDevices = {
+    'Heart Rate Monitors': [],
+    'Stryd Pods': [],
+    'Headphones': [],
+    'Other Devices': [],
+  };
+
+  // Map of known service UUIDs to human-readable names
+  final Map<String, String> _knownServices = {
+    // Base Services
+    '1800': 'Generic Access',
+    '1801': 'Generic Attribute',
+
+    // Standard Health & Fitness Services
+    '180d': 'Heart Rate',
+    '1816': 'Cycling Speed and Cadence',
+    '1814': 'Running Speed and Cadence',
+    '181c': 'User Data',
+    '1826': 'Fitness Machine',
+    '181e': 'Power Service',
+    '181b': 'Body Composition',
+    '181d': 'Weight Scale',
+    '1818': 'Cycling Power',
+    '1819': 'Location and Navigation',
+    '181a': 'Environmental Sensing',
+
+    // Specialized Health Services
+    '181f': 'Continuous Glucose Monitoring',
+
+    // Device Status Services
+    '180f': 'Battery Service',
+
+    // Audio Services
+    '1100': 'Audio Service',
+    '110a': 'Audio Streaming',
+    '1131': 'Microphone Control',
+
+    // Proprietary Services
+    'fc00': 'Stryd Service',
+    '6a4e': 'Running Form Metrics',
+    '1c68': 'Muscle Oxygen',
+    '2af3': 'Stride Sensor',
+  };
 
   @override
   void initState() {
@@ -185,6 +232,95 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
       setState(() {
         _savedDevices = devices;
       });
+
+      // For each connected device, try to discover services
+      for (final device in devices) {
+        if (_connectedDevices.any((d) => d.remoteId == device.remoteId)) {
+          _discoverServices(device);
+        }
+      }
+    }
+  }
+
+  // Get a human-readable name for a service UUID
+  String _getServiceName(String uuid) {
+    // Clean up the UUID string to match our known services map
+    final shortUuid = uuid.replaceAll('-', '').toLowerCase();
+
+    // Check if it's in our known services (try different portions)
+    for (var knownUuid in _knownServices.keys) {
+      if (shortUuid.contains(knownUuid.toLowerCase())) {
+        return _knownServices[knownUuid]!;
+      }
+    }
+
+    // Return a default for unknown services
+    return 'Unknown Service';
+  }
+
+  // Discover services for a device
+  Future<void> _discoverServices(BluetoothDevice device) async {
+    try {
+      if (_deviceConnectionStates[device.remoteId.str] ==
+          DeviceConnectionState.connected) {
+        final services = await device.discoverServices();
+
+        if (mounted) {
+          setState(() {
+            _deviceServices[device.remoteId.str] = services;
+          });
+        }
+
+        debugPrint(
+            'Discovered ${services.length} services for ${device.platformName}');
+
+        for (var service in services) {
+          String knownServiceName = _getServiceName(service.uuid.toString());
+          debugPrint('Service: ${service.uuid} ($knownServiceName)');
+        }
+      }
+    } catch (e) {
+      debugPrint('Error discovering services: $e');
+    }
+  }
+
+  // Categorize scan results into device types
+  void _categorizeScanResults(List<ScanResult> results) {
+    // Clear previous categorization
+    _categorizedDevices.forEach((key, value) => value.clear());
+
+    for (final result in results) {
+      final device = result.device;
+      final deviceName = _bluetoothService.getDeviceDisplayName(device);
+      final lowerDeviceName = deviceName.toLowerCase();
+
+      // Skip devices that are already saved
+      if (_savedDevices.any((d) => d.remoteId == device.remoteId)) {
+        continue;
+      }
+
+      // Categorize by device name and advertisementData
+      if (lowerDeviceName.contains('hr') ||
+          lowerDeviceName.contains('heart') ||
+          lowerDeviceName.contains('hrm') ||
+          device.remoteId.str.contains('22:D8')) {
+        _categorizedDevices['Heart Rate Monitors']!.add(result);
+      } else if (lowerDeviceName.contains('stryd') ||
+          lowerDeviceName.contains('pod') ||
+          lowerDeviceName.contains('foot') ||
+          device.remoteId.str.contains('30:02')) {
+        _categorizedDevices['Stryd Pods']!.add(result);
+      } else if (lowerDeviceName.contains('headphone') ||
+          lowerDeviceName.contains('earphone') ||
+          lowerDeviceName.contains('earbud') ||
+          lowerDeviceName.contains('bose') ||
+          lowerDeviceName.contains('sony') ||
+          lowerDeviceName.contains('jabra') ||
+          lowerDeviceName.contains('audio')) {
+        _categorizedDevices['Headphones']!.add(result);
+      } else {
+        _categorizedDevices['Other Devices']!.add(result);
+      }
     }
   }
 
@@ -225,6 +361,7 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
       if (mounted) {
         setState(() {
           _savedDevices.removeWhere((d) => d.remoteId == device.remoteId);
+          _deviceServices.remove(device.remoteId.str);
         });
       }
 
@@ -256,6 +393,16 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
           duration: const Duration(milliseconds: 800),
         ),
       );
+
+      // Try to discover services for the newly connected device
+      for (final device in _connectedDevices) {
+        if (_bluetoothService.getDeviceDisplayName(device) ==
+            justConnectedDeviceName) {
+          _discoverServices(device);
+          break;
+        }
+      }
+
       return;
     }
 
@@ -271,6 +418,13 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
           duration: const Duration(seconds: 1),
         ),
       );
+
+      // Discover services for all connected devices
+      for (final device in _connectedDevices) {
+        if (!_deviceServices.containsKey(device.remoteId.str)) {
+          _discoverServices(device);
+        }
+      }
 
       // Force UI update to show "All Connected" status
       setState(() {
@@ -292,7 +446,7 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
     }
   }
 
-  // Start scanning for devices with filter options
+  // Start scanning for devices
   void _startScan() async {
     if (!_permissionGranted) {
       await _checkPermissions();
@@ -306,6 +460,7 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
       setState(() {
         _scanResults = [];
         _isScanning = true;
+        _categorizedDevices.forEach((key, value) => value.clear());
       });
     }
 
@@ -317,13 +472,14 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
       if (mounted) {
         setState(() {
           _scanResults = results;
+          _categorizeScanResults(results);
         });
       }
     });
 
     // Set up a timer to stop the scanning display after 10 seconds
     Future.delayed(const Duration(seconds: 10), () {
-      if (mounted) {
+      if (mounted && _isScanning) {
         setState(() {
           _isScanning = false;
         });
@@ -451,6 +607,9 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
         : await _bluetoothService.connectToDeviceWithRetry(device);
 
     if (success && mounted) {
+      // Discover services for the connected device
+      _discoverServices(device);
+
       // Ask to save the device
       _showSaveDeviceDialog(device);
     } else if (mounted) {
@@ -462,7 +621,7 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
       );
     }
 
-    if (mounted) {
+    if (mounted && _isConnecting) {
       setState(() {
         _isConnecting = false;
       });
@@ -473,6 +632,13 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
   Future<void> _disconnectDevice(BluetoothDevice device) async {
     try {
       await _bluetoothService.fastDisconnectDevice(device);
+
+      // Remove services when disconnected
+      if (mounted) {
+        setState(() {
+          _deviceServices.remove(device.remoteId.str);
+        });
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -655,193 +821,471 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
         ),
 
         // Connected devices section
-        if (_connectedDevices.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Connected Devices (${_connectedDevices.length})',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+        Expanded(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              if (_connectedDevices.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.link, size: 18, color: Colors.green),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Connected Devices (${_connectedDevices.length})',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 3,
-            child: ListView.builder(
-              itemCount: _connectedDevices.length,
-              itemBuilder: (context, index) {
-                final device = _connectedDevices[index];
-                final isSaved =
-                    _savedDevices.any((d) => d.remoteId == device.remoteId);
+                ..._connectedDevices.map((device) {
+                  final isSaved =
+                      _savedDevices.any((d) => d.remoteId == device.remoteId);
+                  return _buildConnectedDeviceItem(
+                    device: device,
+                    isSaved: isSaved,
+                    services: _deviceServices[device.remoteId.str] ?? [],
+                    onTap: () => _disconnectDevice(device),
+                    onSaveTap: isSaved
+                        ? () => _forgetDevice(device)
+                        : () => _saveDevice(device),
+                  );
+                }),
+              ],
 
-                return _buildDeviceItem(
-                  device: device,
-                  isConnected: true,
-                  isSaved: isSaved,
-                  onTap: () => _disconnectDevice(device),
-                  onSaveTap: isSaved
-                      ? () => _forgetDevice(device)
-                      : () => _saveDevice(device),
-                );
-              },
-            ),
-          ),
-        ],
-
-        // Saved devices section
-        if (_savedDevices.isNotEmpty &&
-            _savedDevices.any((d) =>
-                !_connectedDevices.contains(d) ||
-                _deviceConnectionStates[d.remoteId.str] ==
-                    DeviceConnectionState.connecting ||
-                _deviceConnectionStates[d.remoteId.str] ==
-                    DeviceConnectionState.authenticating ||
-                _deviceConnectionStates[d.remoteId.str] ==
-                    DeviceConnectionState.failed)) ...[
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Saved Devices (${_savedDevices.where((d) => !_connectedDevices.contains(d) || _deviceConnectionStates[d.remoteId.str] == DeviceConnectionState.connecting || _deviceConnectionStates[d.remoteId.str] == DeviceConnectionState.authenticating || _deviceConnectionStates[d.remoteId.str] == DeviceConnectionState.failed).length})',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+              if (_savedDevices.isNotEmpty &&
+                  _savedDevices.any((d) =>
+                      !_connectedDevices.contains(d) ||
+                      _deviceConnectionStates[d.remoteId.str] ==
+                          DeviceConnectionState.connecting ||
+                      _deviceConnectionStates[d.remoteId.str] ==
+                          DeviceConnectionState.authenticating ||
+                      _deviceConnectionStates[d.remoteId.str] ==
+                          DeviceConnectionState.failed)) ...[
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.bookmark,
+                          size: 18, color: Colors.orange),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Saved Devices (${_savedDevices.where((d) => !_connectedDevices.contains(d) || _deviceConnectionStates[d.remoteId.str] == DeviceConnectionState.connecting || _deviceConnectionStates[d.remoteId.str] == DeviceConnectionState.authenticating || _deviceConnectionStates[d.remoteId.str] == DeviceConnectionState.failed).length})',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
+                ..._savedDevices.where((device) {
+                  final isConnected = _connectedDevices.contains(device);
+                  final connectionState =
+                      _deviceConnectionStates[device.remoteId.str] ??
+                          (isConnected
+                              ? DeviceConnectionState.connected
+                              : DeviceConnectionState.disconnected);
+
+                  // Skip if already connected (shown above) - unless it's in connecting, authenticating or failed state
+                  return !isConnected ||
+                      connectionState == DeviceConnectionState.connecting ||
+                      connectionState == DeviceConnectionState.authenticating ||
+                      connectionState == DeviceConnectionState.failed;
+                }).map((device) {
+                  final isConnected = _connectedDevices.contains(device);
+                  return _buildDeviceItem(
+                    device: device,
+                    isConnected: isConnected,
+                    isSaved: true,
+                    onTap: () => _connectToDevice(device),
+                    onSaveTap: () => _forgetDevice(device),
+                  );
+                }),
+              ],
+
+              // Discovered devices sections by category
+              if (_isScanning || _scanResults.isNotEmpty) ...[
+                // Heart Rate Monitors section
+                if (_categorizedDevices['Heart Rate Monitors']!.isNotEmpty) ...[
+                  _buildCategoryHeader(
+                    'Heart Rate Monitors',
+                    Icons.favorite,
+                    Colors.red,
+                    _categorizedDevices['Heart Rate Monitors']!.length,
+                  ),
+                  ..._categorizedDevices['Heart Rate Monitors']!.map((result) {
+                    return _buildDeviceItem(
+                      device: result.device,
+                      isConnected: false,
+                      isSaved: false,
+                      rssi: result.rssi,
+                      onTap: () => _connectToDevice(result.device),
+                      onSaveTap: () => _saveDevice(result.device),
+                    );
+                  }),
+                ],
+
+                // Stryd Pods section
+                if (_categorizedDevices['Stryd Pods']!.isNotEmpty) ...[
+                  _buildCategoryHeader(
+                    'Stryd Pods',
+                    Icons.directions_run,
+                    Colors.green,
+                    _categorizedDevices['Stryd Pods']!.length,
+                  ),
+                  ..._categorizedDevices['Stryd Pods']!.map((result) {
+                    return _buildDeviceItem(
+                      device: result.device,
+                      isConnected: false,
+                      isSaved: false,
+                      rssi: result.rssi,
+                      onTap: () => _connectToDevice(result.device),
+                      onSaveTap: () => _saveDevice(result.device),
+                    );
+                  }),
+                ],
+
+                // Headphones section
+                if (_categorizedDevices['Headphones']!.isNotEmpty) ...[
+                  _buildCategoryHeader(
+                    'Headphones',
+                    Icons.headphones,
+                    Colors.blueGrey,
+                    _categorizedDevices['Headphones']!.length,
+                  ),
+                  ..._categorizedDevices['Headphones']!.map((result) {
+                    return _buildDeviceItem(
+                      device: result.device,
+                      isConnected: false,
+                      isSaved: false,
+                      rssi: result.rssi,
+                      onTap: () => _connectToDevice(result.device),
+                      onSaveTap: () => _saveDevice(result.device),
+                    );
+                  }),
+                ],
+
+                // Other devices section
+                if (_categorizedDevices['Other Devices']!.isNotEmpty) ...[
+                  _buildCategoryHeader(
+                    'Other Devices',
+                    Icons.bluetooth,
+                    Colors.blue,
+                    _categorizedDevices['Other Devices']!.length,
+                  ),
+                  ..._categorizedDevices['Other Devices']!.map((result) {
+                    return _buildDeviceItem(
+                      device: result.device,
+                      isConnected: false,
+                      isSaved: false,
+                      rssi: result.rssi,
+                      onTap: () => _connectToDevice(result.device),
+                      onSaveTap: () => _saveDevice(result.device),
+                    );
+                  }),
+                ],
+              ],
+
+              // If no devices found
+              if (_connectedDevices.isEmpty &&
+                  _scanResults.isEmpty &&
+                  _savedDevices.isEmpty)
+                _buildEmptyState(),
+            ],
           ),
-          Expanded(
-            flex: 2,
-            child: ListView.builder(
-              itemCount: _savedDevices.length,
-              itemBuilder: (context, index) {
-                final device = _savedDevices[index];
-                final isConnected = _connectedDevices.contains(device);
-                final connectionState =
-                    _deviceConnectionStates[device.remoteId.str] ??
-                        (isConnected
-                            ? DeviceConnectionState.connected
-                            : DeviceConnectionState.disconnected);
+        ),
+      ],
+    );
+  }
 
-                // Skip if already connected (shown above) - unless it's in connecting, authenticating or failed state
-                if (isConnected &&
-                    connectionState != DeviceConnectionState.connecting &&
-                    connectionState != DeviceConnectionState.authenticating &&
-                    connectionState != DeviceConnectionState.failed) {
-                  return const SizedBox.shrink();
-                }
-
-                return _buildDeviceItem(
-                  device: device,
-                  isConnected: isConnected,
-                  isSaved: true,
-                  onTap: () => _connectToDevice(device),
-                  onSaveTap: () => _forgetDevice(device),
-                );
-              },
-            ),
-          ),
-        ],
-
-        // Scanned devices section
-        if (_scanResults.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildEmptyState() {
+    return Container(
+      height: 300,
+      alignment: Alignment.center,
+      child: _isScanning
+          ? const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  'Discovered Devices (${_scanResults.length})',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                SizedBox(
+                  width: 60,
+                  height: 60,
+                  child: CircularProgressIndicator(),
                 ),
-                if (_isScanning)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                    ),
-                  ),
+                SizedBox(height: 20),
+                Text('Scanning for nearby devices...'),
+              ],
+            )
+          : const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.bluetooth_searching,
+                  size: 80,
+                  color: Colors.grey,
+                ),
+                SizedBox(height: 20),
+                Text('No devices found'),
+                SizedBox(height: 10),
+                Text(
+                  'Tap the button below to scan for nearby devices',
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildCategoryHeader(
+      String title, IconData icon, Color color, int count) {
+    // Fixed version using List<Widget> approach to avoid if statement issues
+    final List<Widget> children = [
+      Icon(icon, size: 18, color: color),
+      const SizedBox(width: 8),
+      Text(
+        '$title ($count)',
+        style: const TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    ];
+
+    // Add spinner if scanning
+    if (_isScanning) {
+      children.add(const Spacer());
+      children.add(
+        SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: color,
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Row(
+        children: children,
+      ),
+    );
+  }
+
+  // Enhanced device item for connected devices with services display
+  Widget _buildConnectedDeviceItem({
+    required BluetoothDevice device,
+    required bool isSaved,
+    required List<BluetoothService> services,
+    required VoidCallback onTap,
+    required VoidCallback onSaveTap,
+  }) {
+    // Get device name
+    final deviceName = _bluetoothService.getDeviceDisplayName(device);
+
+    // Process services for display
+    final Map<String, bool> serviceTypes = {
+      // Basic Services
+      'Heart Rate': false,
+      'Power': false,
+      'Cadence': false,
+      'Speed': false,
+      'Audio': false,
+      'Battery': false,
+
+      // Additional Health & Fitness Services
+      'Body Composition': false,
+      'Weight Scale': false,
+      'Cycling Power': false,
+      'Location': false,
+      'Environmental': false,
+
+      // Specialized Services
+      'Glucose': false,
+      'Running Form': false,
+      'Muscle Oxygen': false,
+      'Stride': false,
+    };
+
+    // Check for known services
+    for (final service in services) {
+      final uuid = service.uuid.toString().toLowerCase();
+
+      // Basic Services
+      if (uuid.contains('180d')) serviceTypes['Heart Rate'] = true;
+      if (uuid.contains('181e') || uuid.contains('fc00'))
+        serviceTypes['Power'] = true;
+      if (uuid.contains('1814') || uuid.contains('1816')) {
+        serviceTypes['Cadence'] = true;
+        serviceTypes['Speed'] = true;
+      }
+      if (uuid.contains('1100') || uuid.contains('110a'))
+        serviceTypes['Audio'] = true;
+      if (uuid.contains('180f')) serviceTypes['Battery'] = true;
+
+      // Additional Health & Fitness Services
+      if (uuid.contains('181b')) serviceTypes['Body Composition'] = true;
+      if (uuid.contains('181d')) serviceTypes['Weight Scale'] = true;
+      if (uuid.contains('1818')) serviceTypes['Cycling Power'] = true;
+      if (uuid.contains('1819')) serviceTypes['Location'] = true;
+      if (uuid.contains('181a')) serviceTypes['Environmental'] = true;
+
+      // Specialized Services
+      if (uuid.contains('181f')) serviceTypes['Glucose'] = true;
+      if (uuid.contains('6a4e')) serviceTypes['Running Form'] = true;
+      if (uuid.contains('1c68')) serviceTypes['Muscle Oxygen'] = true;
+      if (uuid.contains('2af3')) serviceTypes['Stride'] = true;
+    }
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          ListTile(
+            leading: CircleAvatar(
+              backgroundColor: Colors.green,
+              child: Icon(
+                _getDeviceIcon(deviceName),
+                color: Colors.white,
+              ),
+            ),
+            title: Text(
+              deviceName,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            subtitle: Text(
+              'Connected${isSaved ? ' • Saved for auto-connect' : ''}',
+              style: const TextStyle(
+                color: Colors.green,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.link_off),
+                  onPressed: onTap,
+                  tooltip: 'Disconnect',
+                ),
+                IconButton(
+                  icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_outline),
+                  onPressed: onSaveTap,
+                  tooltip: isSaved ? 'Forget device' : 'Save for auto-connect',
+                ),
               ],
             ),
           ),
-          Expanded(
-            flex: 5,
-            child: ListView.builder(
-              itemCount: _scanResults.length,
-              itemBuilder: (context, index) {
-                final result = _scanResults[index];
-                final device = result.device;
-                final isConnected =
-                    _connectedDevices.any((d) => d.remoteId == device.remoteId);
-                final isSaved =
-                    _savedDevices.any((d) => d.remoteId == device.remoteId);
 
-                // Skip if device is already in connected or saved list
-                if (isConnected || isSaved) return const SizedBox.shrink();
-
-                return _buildDeviceItem(
-                  device: device,
-                  isConnected: isConnected,
-                  isSaved: isSaved,
-                  rssi: result.rssi,
-                  onTap: () => _connectToDevice(device),
-                  onSaveTap: isSaved
-                      ? () => _forgetDevice(device)
-                      : () => _saveDevice(device),
-                );
-              },
-            ),
-          ),
-        ],
-
-        // If no devices found
-        if (_connectedDevices.isEmpty &&
-            _scanResults.isEmpty &&
-            _savedDevices.isEmpty)
-          Expanded(
-            child: Center(
-              child: _isScanning
-                  ? const Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 60,
-                          height: 60,
-                          child: CircularProgressIndicator(),
-                        ),
-                        SizedBox(height: 20),
-                        Text('Scanning for nearby devices...'),
-                      ],
-                    )
-                  : const Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.bluetooth_searching,
-                          size: 80,
-                          color: Colors.grey,
-                        ),
-                        SizedBox(height: 20),
-                        Text('No devices found'),
-                        SizedBox(height: 10),
-                        Text(
-                          'Tap the button below to scan for nearby devices',
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+          // Services section
+          if (services.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Divider(),
+                  const Text(
+                    'Services:',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      // Basic Services
+                      if (serviceTypes['Heart Rate']!)
+                        _buildServiceChip(
+                            'Heart Rate', Icons.favorite, Colors.red),
+                      if (serviceTypes['Power']!)
+                        _buildServiceChip('Power', Icons.bolt, Colors.orange),
+                      if (serviceTypes['Cadence']!)
+                        _buildServiceChip(
+                            'Cadence', Icons.directions_walk, Colors.green),
+                      if (serviceTypes['Speed']!)
+                        _buildServiceChip('Speed', Icons.speed, Colors.blue),
+                      if (serviceTypes['Audio']!)
+                        _buildServiceChip(
+                            'Audio', Icons.headphones, Colors.purple),
+                      if (serviceTypes['Battery']!)
+                        _buildServiceChip(
+                            'Battery', Icons.battery_full, Colors.teal),
+
+                      // Additional Health & Fitness Services
+                      if (serviceTypes['Body Composition']!)
+                        _buildServiceChip('Body Composition',
+                            Icons.monitor_weight, Colors.indigo),
+                      if (serviceTypes['Weight Scale']!)
+                        _buildServiceChip(
+                            'Weight Scale', Icons.scale, Colors.brown),
+                      if (serviceTypes['Cycling Power']!)
+                        _buildServiceChip(
+                            'Cycling Power', Icons.pedal_bike, Colors.pink),
+                      if (serviceTypes['Location']!)
+                        _buildServiceChip(
+                            'Location', Icons.location_on, Colors.deepOrange),
+                      if (serviceTypes['Environmental']!)
+                        _buildServiceChip(
+                            'Environment', Icons.thermostat, Colors.lightGreen),
+
+                      // Specialized Services
+                      if (serviceTypes['Glucose']!)
+                        _buildServiceChip(
+                            'Glucose', Icons.timeline, Colors.deepPurple),
+                      if (serviceTypes['Running Form']!)
+                        _buildServiceChip(
+                            'Running Form', Icons.run_circle, Colors.amber),
+                      if (serviceTypes['Muscle Oxygen']!)
+                        _buildServiceChip(
+                            'Muscle O₂', Icons.bloodtype, Colors.redAccent),
+                      if (serviceTypes['Stride']!)
+                        _buildServiceChip(
+                            'Stride', Icons.straighten, Colors.cyan),
+
+                      // Show "Other" if we have services but none of the known types
+                      if (services.isNotEmpty &&
+                          !serviceTypes.values.any((value) => value))
+                        _buildServiceChip('Bluetooth Services', Icons.bluetooth,
+                            Colors.blueGrey),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-      ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Build a service chip for display
+  Widget _buildServiceChip(String label, IconData icon, Color color) {
+    return Chip(
+      padding: EdgeInsets.zero,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      backgroundColor: color.withAlpha(30),
+      avatar: Icon(icon, color: color, size: 16),
+      label: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+        ),
+      ),
     );
   }
 
@@ -967,11 +1411,21 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
         break;
       case DeviceConnectionState.disconnected:
         stateColor = Colors.grey;
-        stateText = 'Tap to connect';
-        trailingWidget = IconButton(
-          icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_outline),
-          onPressed: onSaveTap,
-          tooltip: isSaved ? 'Forget device' : 'Save for auto-connect',
+        stateText = isSaved ? 'Tap to connect' : 'Available';
+        trailingWidget = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.link),
+              onPressed: onTap,
+              tooltip: 'Connect',
+            ),
+            IconButton(
+              icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_outline),
+              onPressed: onSaveTap,
+              tooltip: isSaved ? 'Forget device' : 'Save for auto-connect',
+            ),
+          ],
         );
         break;
     }
@@ -991,7 +1445,7 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
           alignment: Alignment.bottomRight,
           children: [
             CircleAvatar(
-              backgroundColor: isConnected ? Colors.green : Colors.teal,
+              backgroundColor: isSaved ? Colors.orange : Colors.teal,
               child: Icon(
                 _getDeviceIcon(deviceName),
                 color: Colors.white,
@@ -1092,7 +1546,7 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
                 ],
               ],
             ),
-            if (isSaved)
+            if (isSaved && !isConnected)
               const Text(
                 'Saved for auto-connect',
                 style: TextStyle(fontSize: 12),
