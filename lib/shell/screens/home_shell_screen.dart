@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/menu_item_data.dart';
 import '../widgets/vertical_carousel_menu.dart';
 import '../../core/constants/app_constants.dart';
-import '../../features/sensors/screens/sensors_screen.dart'; // Updated import
+import '../../features/sensors/screens/sensors_screen.dart';
+import '../../features/sensors/screens/gps_hub_screen.dart'; // Added GPS Hub import
 import '../../features/run_tracker/screens/run_tracker_screen.dart';
 import '../../features/academy/screens/academy_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
@@ -57,6 +58,11 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
         title: AppConstants.sensors,
         icon: Icons.bluetooth,
         color: Colors.teal),
+    MenuItemData(
+        id: 'gps_hub',
+        title: AppConstants.gpsHub,
+        icon: Icons.gps_fixed,
+        color: Colors.amber),
   ];
 
   // Current selected tab index for bottom navigation
@@ -83,6 +89,12 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
           MaterialPageRoute(
               builder: (context) =>
                   const SensorsScreen()), // Updated to use enhanced screen
+        );
+        break;
+      case 'gps_hub':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const GpsHubScreen()),
         );
         break;
       case 'run':
@@ -317,6 +329,15 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
                   onTap: () {
                     Navigator.pop(context);
                     _navigateToModule('run');
+                  },
+                ),
+                _buildQuickActionButton(
+                  icon: Icons.gps_fixed,
+                  label: 'GPS Hub',
+                  color: Colors.amber,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _navigateToModule('gps_hub');
                   },
                 ),
                 _buildQuickActionButton(
