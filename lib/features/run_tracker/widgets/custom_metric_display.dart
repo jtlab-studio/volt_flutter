@@ -53,6 +53,43 @@ class CustomMetricDisplay extends StatelessWidget {
               ),
             ),
 
+            // Check if we need to show an average value
+            if (_shouldShowAverage())
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.only(top: 4),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: Colors.grey[800]!,
+                      width: 1,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'AVG',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey[500],
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      _formatAverageValue(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[300],
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             // Long press instruction (subtle hint)
             Text(
               'Hold to change',
@@ -70,46 +107,89 @@ class CustomMetricDisplay extends StatelessWidget {
 
   /// Get the display label for the metric
   String _getMetricLabel() {
+    String baseLabel = '';
+
     switch (metricKey) {
       case 'pace':
-        return 'PACE';
+        baseLabel = 'PACE';
+        break;
+      case 'avgPace':
+        baseLabel = 'AVG PACE';
+        break;
       case 'heartRate':
-        return 'HEART RATE';
+        baseLabel = 'HEART RATE';
+        break;
+      case 'avgHeartRate':
+        baseLabel = 'AVG HEART RATE';
+        break;
       case 'power':
-        return 'POWER';
+        baseLabel = 'POWER';
+        break;
+      case 'avgPower':
+        baseLabel = 'AVG POWER';
+        break;
       case 'cadence':
-        return 'CADENCE';
+        baseLabel = 'CADENCE';
+        break;
+      case 'avgCadence':
+        baseLabel = 'AVG CADENCE';
+        break;
       case 'distance':
-        return 'DISTANCE';
+        baseLabel = 'DISTANCE';
+        break;
       case 'duration':
-        return 'TIME';
+        baseLabel = 'TIME';
+        break;
       case 'elevationGain':
-        return 'ELEV. GAIN';
+        baseLabel = 'ELEV. GAIN';
+        break;
       case 'elevationLoss':
-        return 'ELEV. LOSS';
+        baseLabel = 'ELEV. LOSS';
+        break;
       default:
-        return metricKey.toUpperCase();
+        baseLabel = metricKey.toUpperCase();
+        break;
     }
+
+    return baseLabel;
   }
 
   /// Format the metric value based on its type
   String _formatMetricValue() {
+    final currentActivity = metrics['currentActivity'];
+
     switch (metricKey) {
       case 'pace':
         final pace = metrics['pace'] as int?;
         return SensorReading.formatPace(pace);
 
+      case 'avgPace':
+        final avgPace = currentActivity?.averagePaceSecondsPerKm;
+        return SensorReading.formatPace(avgPace);
+
       case 'heartRate':
         final heartRate = metrics['heartRate'] as int?;
         return heartRate != null ? '$heartRate bpm' : '--';
+
+      case 'avgHeartRate':
+        final avgHeartRate = currentActivity?.averageHeartRate;
+        return avgHeartRate != null ? '$avgHeartRate bpm' : '--';
 
       case 'power':
         final power = metrics['power'] as int?;
         return power != null ? '$power W' : '--';
 
+      case 'avgPower':
+        final avgPower = currentActivity?.averagePower;
+        return avgPower != null ? '$avgPower W' : '--';
+
       case 'cadence':
         final cadence = metrics['cadence'] as int?;
         return cadence != null ? '$cadence spm' : '--';
+
+      case 'avgCadence':
+        final avgCadence = currentActivity?.averageCadence;
+        return avgCadence != null ? '$avgCadence spm' : '--';
 
       case 'distance':
         final distance = metrics['distance'] as double;
@@ -126,6 +206,62 @@ class CustomMetricDisplay extends StatelessWidget {
       case 'elevationLoss':
         final elevationLoss = metrics['elevationLoss'] as double;
         return '${elevationLoss.toStringAsFixed(0)} m';
+
+      default:
+        return '--';
+    }
+  }
+
+  /// Check if we should display an average value
+  bool _shouldShowAverage() {
+    // Only display average values for current metrics that have corresponding average metrics
+    if (metricKey == 'pace' ||
+        metricKey == 'heartRate' ||
+        metricKey == 'power' ||
+        metricKey == 'cadence') {
+      final currentActivity = metrics['currentActivity'];
+      if (currentActivity == null) return false;
+
+      // Check if the corresponding average value exists
+      switch (metricKey) {
+        case 'pace':
+          return currentActivity.averagePaceSecondsPerKm != null;
+        case 'heartRate':
+          return currentActivity.averageHeartRate != null;
+        case 'power':
+          return currentActivity.averagePower != null;
+        case 'cadence':
+          return currentActivity.averageCadence != null;
+        default:
+          return false;
+      }
+    }
+
+    // Don't show averages for already-average metrics
+    return false;
+  }
+
+  /// Format the average value for the metric
+  String _formatAverageValue() {
+    final currentActivity = metrics['currentActivity'];
+    if (currentActivity == null) return '--';
+
+    switch (metricKey) {
+      case 'pace':
+        final avgPace = currentActivity.averagePaceSecondsPerKm;
+        return '${SensorReading.formatPace(avgPace)} min/km';
+
+      case 'heartRate':
+        final avgHr = currentActivity.averageHeartRate;
+        return avgHr != null ? '$avgHr bpm' : '--';
+
+      case 'power':
+        final avgPower = currentActivity.averagePower;
+        return avgPower != null ? '$avgPower W' : '--';
+
+      case 'cadence':
+        final avgCadence = currentActivity.averageCadence;
+        return avgCadence != null ? '$avgCadence spm' : '--';
 
       default:
         return '--';

@@ -360,7 +360,8 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
-    final footerHeight = 64.0;
+    final footerHeight =
+        84.0; // Increased from 64.0 to fix the 18px overflow (added 20px)
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
@@ -395,13 +396,13 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
             ),
           ),
 
-          // Footer area
+          // Footer area - updated height
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
             child: Container(
-              height: footerHeight + bottomPadding,
+              height: footerHeight + bottomPadding, // Use updated footerHeight
               padding: EdgeInsets.only(bottom: bottomPadding),
               decoration: BoxDecoration(
                 color: Colors.black,
@@ -413,14 +414,20 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
                   ),
                 ],
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildFooterButton(Icons.home, 'Home', 0),
-                  _buildFooterButton(Icons.favorite_border, 'Favorites', 1),
-                  _buildFooterButton(Icons.history, 'History', 2),
-                  _buildFooterButton(Icons.support_agent, 'Support', 3),
-                ],
+              child: Container(
+                height:
+                    footerHeight, // Use updated footerHeight for the content
+                padding: const EdgeInsets.symmetric(
+                    vertical: 10), // Added vertical padding
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildFooterButton(Icons.home, 'Home', 0),
+                    _buildFooterButton(Icons.favorite_border, 'Favorites', 1),
+                    _buildFooterButton(Icons.history, 'History', 2),
+                    _buildFooterButton(Icons.support_agent, 'Support', 3),
+                  ],
+                ),
               ),
             ),
           ),

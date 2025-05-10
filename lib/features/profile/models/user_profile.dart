@@ -77,19 +77,54 @@ class UserProfile {
     );
   }
 
-  /// Save profile to shared preferences
-  Future<void> save() async {
+  /// Save profile to shared preferences with better error handling and validation
+  Future<bool> save() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      // Validate critical fields before saving
+      if (weightKg <= 0) {
+        debugPrint('Invalid weight value: $weightKg kg');
+        return false;
+      }
+
+      if (heightCm <= 0) {
+        debugPrint('Invalid height value: $heightCm cm');
+        return false;
+      }
+
+      if (age <= 0 || age > 120) {
+        debugPrint('Invalid age value: $age');
+        return false;
+      }
+
+      // Update lastUpdated timestamp to now
+      lastUpdated = DateTime.now();
+
+      // Convert to JSON
       final json = jsonEncode(toMap());
-      await prefs.setString('user_profile', json);
-      debugPrint('User profile saved successfully');
+
+      // Get shared preferences instance
+      final prefs = await SharedPreferences.getInstance();
+
+      // Save to shared preferences
+      final result = await prefs.setString('user_profile', json);
+
+      // Also save a backup copy with timestamp for recovery purposes
+      final backupKey =
+          'user_profile_backup_${DateTime.now().millisecondsSinceEpoch}';
+      await prefs.setString(backupKey, json);
+
+      // Keep only the 3 most recent backups to avoid filling storage
+      await _cleanupOldBackups(prefs);
+
+      debugPrint('User profile saved successfully: $result');
+      return result;
     } catch (e) {
       debugPrint('Error saving user profile: $e');
+      return false;
     }
   }
 
-  /// Load profile from shared preferences
+  /// Load profile from shared preferences with enhanced error handling
   static Future<UserProfile> load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -100,11 +135,80 @@ class UserProfile {
         return UserProfile();
       }
 
-      final map = jsonDecode(json) as Map<String, dynamic>;
-      return UserProfile.fromMap(map);
+      // Attempt to parse the JSON
+      try {
+        final map = jsonDecode(json) as Map<String, dynamic>;
+        return UserProfile.fromMap(map);
+      } catch (parseError) {
+        debugPrint('Error parsing user profile JSON: $parseError');
+
+        // Attempt to recover from most recent backup
+        return _recoverFromBackup(prefs);
+      }
     } catch (e) {
       debugPrint('Error loading user profile: $e');
       return UserProfile();
+    }
+  }
+
+  /// Recover from backup if the main profile is corrupted
+  static Future<UserProfile> _recoverFromBackup(SharedPreferences prefs) async {
+    try {
+      // Get all keys that match the backup pattern
+      final allKeys = prefs.getKeys();
+      final backupKeys = allKeys
+          .where((key) => key.startsWith('user_profile_backup_'))
+          .toList();
+
+      // Sort by timestamp (newest first)
+      backupKeys.sort((a, b) => b.compareTo(a));
+
+      // Try each backup until one works
+      for (final key in backupKeys) {
+        final backupJson = prefs.getString(key);
+        if (backupJson != null) {
+          try {
+            final map = jsonDecode(backupJson) as Map<String, dynamic>;
+            debugPrint('Successfully recovered user profile from backup: $key');
+            return UserProfile.fromMap(map);
+          } catch (e) {
+            // This backup is also corrupted, try the next one
+            debugPrint('Backup $key is also corrupted: $e');
+          }
+        }
+      }
+
+      // No valid backups found
+      debugPrint('No valid profile backups found, returning default');
+      return UserProfile();
+    } catch (e) {
+      debugPrint('Error recovering from backup: $e');
+      return UserProfile();
+    }
+  }
+
+  /// Clean up old backups, keeping only the most recent ones
+  Future<void> _cleanupOldBackups(SharedPreferences prefs) async {
+    try {
+      // Get all keys that match the backup pattern
+      final allKeys = prefs.getKeys();
+      final backupKeys = allKeys
+          .where((key) => key.startsWith('user_profile_backup_'))
+          .toList();
+
+      // Sort by timestamp (oldest first)
+      backupKeys.sort();
+
+      // Keep only the 3 most recent backups
+      if (backupKeys.length > 3) {
+        final keysToRemove = backupKeys.sublist(0, backupKeys.length - 3);
+        for (final key in keysToRemove) {
+          await prefs.remove(key);
+          debugPrint('Removed old profile backup: $key');
+        }
+      }
+    } catch (e) {
+      debugPrint('Error cleaning up old backups: $e');
     }
   }
 

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vibration/vibration.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import '../../sensors/screens/bluetooth_service.dart'; // Added for BLE connection
 
 import '../providers/tracker_providers.dart';
 import '../services/tracker_service.dart';
@@ -46,6 +47,10 @@ class _ActivityTrackerScreenState extends ConsumerState<ActivityTrackerScreen>
 
     // Automatically connect to sensors as soon as the screen is opened
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Connect to saved BLE devices first
+      _connectToSavedDevices();
+
+      // Then prepare the activity (which will also set up GPS etc.)
       _prepareActivity();
     });
   }
@@ -81,6 +86,65 @@ class _ActivityTrackerScreenState extends ConsumerState<ActivityTrackerScreen>
     WidgetsBinding.instance.removeObserver(this);
     _tabController.dispose();
     super.dispose();
+  }
+
+  /// Connect to saved BLE sensor devices
+  Future<void> _connectToSavedDevices() async {
+    // Show a connecting indicator
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Connecting to saved sensors...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
+
+    try {
+      // Create Bluetooth service instance
+      final bluetoothService = CustomBluetoothService();
+
+      // Load saved devices
+      final savedDevices = await bluetoothService.loadSavedDevices();
+
+      if (savedDevices.isNotEmpty) {
+        // Connect to saved devices
+        final connectedCount =
+            await bluetoothService.autoConnectToSavedDevices(savedDevices);
+
+        // Show connection status
+        if (mounted) {
+          if (connectedCount > 0) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                    'Connected to $connectedCount ${connectedCount == 1 ? 'sensor' : 'sensors'}'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 1),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('No sensors connected'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 1),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error connecting to saved devices: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error connecting to sensors: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   // Prepare the activity
