@@ -1055,7 +1055,7 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
       ),
     ];
 
-    // Add spinner if scanning
+    // Add spinner if scanning - FIXED WITH PROPER CURLY BRACES
     if (_isScanning) {
       children.add(const Spacer());
       children.add(
@@ -1117,30 +1117,54 @@ class _SensorsScreenState extends ConsumerState<SensorsScreen>
     for (final service in services) {
       final uuid = service.uuid.toString().toLowerCase();
 
-      // Basic Services
-      if (uuid.contains('180d')) serviceTypes['Heart Rate'] = true;
-      if (uuid.contains('181e') || uuid.contains('fc00'))
+      // Basic Services - FIXED WITH PROPER CURLY BRACES
+      if (uuid.contains('180d')) {
+        serviceTypes['Heart Rate'] = true;
+      }
+      if (uuid.contains('181e') || uuid.contains('fc00')) {
         serviceTypes['Power'] = true;
+      }
       if (uuid.contains('1814') || uuid.contains('1816')) {
         serviceTypes['Cadence'] = true;
         serviceTypes['Speed'] = true;
       }
-      if (uuid.contains('1100') || uuid.contains('110a'))
+      if (uuid.contains('1100') || uuid.contains('110a')) {
         serviceTypes['Audio'] = true;
-      if (uuid.contains('180f')) serviceTypes['Battery'] = true;
+      }
+      if (uuid.contains('180f')) {
+        serviceTypes['Battery'] = true;
+      }
 
-      // Additional Health & Fitness Services
-      if (uuid.contains('181b')) serviceTypes['Body Composition'] = true;
-      if (uuid.contains('181d')) serviceTypes['Weight Scale'] = true;
-      if (uuid.contains('1818')) serviceTypes['Cycling Power'] = true;
-      if (uuid.contains('1819')) serviceTypes['Location'] = true;
-      if (uuid.contains('181a')) serviceTypes['Environmental'] = true;
+      // Additional Health & Fitness Services - FIXED WITH PROPER CURLY BRACES
+      if (uuid.contains('181b')) {
+        serviceTypes['Body Composition'] = true;
+      }
+      if (uuid.contains('181d')) {
+        serviceTypes['Weight Scale'] = true;
+      }
+      if (uuid.contains('1818')) {
+        serviceTypes['Cycling Power'] = true;
+      }
+      if (uuid.contains('1819')) {
+        serviceTypes['Location'] = true;
+      }
+      if (uuid.contains('181a')) {
+        serviceTypes['Environmental'] = true;
+      }
 
-      // Specialized Services
-      if (uuid.contains('181f')) serviceTypes['Glucose'] = true;
-      if (uuid.contains('6a4e')) serviceTypes['Running Form'] = true;
-      if (uuid.contains('1c68')) serviceTypes['Muscle Oxygen'] = true;
-      if (uuid.contains('2af3')) serviceTypes['Stride'] = true;
+      // Specialized Services - FIXED WITH PROPER CURLY BRACES
+      if (uuid.contains('181f')) {
+        serviceTypes['Glucose'] = true;
+      }
+      if (uuid.contains('6a4e')) {
+        serviceTypes['Running Form'] = true;
+      }
+      if (uuid.contains('1c68')) {
+        serviceTypes['Muscle Oxygen'] = true;
+      }
+      if (uuid.contains('2af3')) {
+        serviceTypes['Stride'] = true;
+      }
     }
 
     return Card(
