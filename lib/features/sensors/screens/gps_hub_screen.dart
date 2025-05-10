@@ -1,7 +1,6 @@
 // lib/features/sensors/screens/gps_hub_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/gps_providers.dart';
 import '../widgets/gps_validation_card.dart';
 
@@ -32,7 +31,7 @@ class _GpsHubScreenState extends ConsumerState<GpsHubScreen> {
 
     try {
       // Access the GPS service through Riverpod
-      final capabilities = await ref.read(gpsCapabilitiesProvider.future);
+      await ref.read(gpsCapabilitiesProvider.future);
 
       // Setting will be done once capabilities are fetched
       setState(() {
@@ -170,8 +169,6 @@ class _GpsHubScreenState extends ConsumerState<GpsHubScreen> {
   Widget build(BuildContext context) {
     // Watch capabilities
     final capabilities = ref.watch(gpsCapabilitiesProvider);
-    // Watch settings
-    final settings = ref.watch(gpsSettingsProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFF121212),

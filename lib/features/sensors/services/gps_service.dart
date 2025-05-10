@@ -118,7 +118,7 @@ class GpsService {
     try {
       // In a real app, we would call platform-specific code to apply these settings
       // Example:
-      final result = await _platform.invokeMethod('configureGps', {
+      await _platform.invokeMethod('configureGps', {
         'mode': mode,
         'multiFrequency': multiFrequency,
         'rawMeasurements': rawMeasurements,
