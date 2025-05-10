@@ -6,7 +6,7 @@ import '../widgets/vertical_carousel_menu.dart';
 import '../../core/constants/app_constants.dart';
 import '../../features/sensors/screens/sensors_screen.dart';
 import '../../features/sensors/screens/gps_hub_screen.dart'; // Added GPS Hub import
-import '../../features/run_tracker/screens/run_tracker_screen.dart';
+import '../../features/run_tracker/screens/activity_tracker_screen.dart';
 import '../../features/academy/screens/academy_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
 import '../../features/race_prep/screens/race_prep_screen.dart';
@@ -100,7 +100,8 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
       case 'run':
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const RunTrackerScreen()),
+          MaterialPageRoute(
+              builder: (context) => const ActivityTrackerScreen()),
         );
         break;
       case 'routes':

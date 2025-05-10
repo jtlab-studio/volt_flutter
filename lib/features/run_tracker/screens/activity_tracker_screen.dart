@@ -1,4 +1,4 @@
-// lib/features/run_tracker/screens/run_tracker_screen.dart
+// lib/features/run_tracker/screens/activity_tracker_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vibration/vibration.dart';
@@ -11,16 +11,16 @@ import '../widgets/metrics_grid.dart';
 import '../widgets/sensor_status_bar.dart';
 import '../widgets/activity_controls.dart';
 import 'activity_summary_screen.dart';
-import 'activity_history_screen.dart';
 
-class RunTrackerScreen extends ConsumerStatefulWidget {
-  const RunTrackerScreen({super.key});
+class ActivityTrackerScreen extends ConsumerStatefulWidget {
+  const ActivityTrackerScreen({super.key});
 
   @override
-  ConsumerState<RunTrackerScreen> createState() => _RunTrackerScreenState();
+  ConsumerState<ActivityTrackerScreen> createState() =>
+      _ActivityTrackerScreenState();
 }
 
-class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
+class _ActivityTrackerScreenState extends ConsumerState<ActivityTrackerScreen>
     with WidgetsBindingObserver {
   // Flag to show modal when initializing
   bool _isInitializing = true;
@@ -212,15 +212,6 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
     }
   }
 
-  // View activity history
-  void _viewActivityHistory() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => const ActivityHistoryScreen(),
-      ),
-    );
-  }
-
   // Build the map section
   Widget _buildMapSection() {
     final currentActivity = ref.watch(currentActivityProvider);
@@ -240,50 +231,57 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
       });
     }
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: FlutterMap(
-        mapController: _mapController,
-        options: MapOptions(
-          initialCenter: center,
-          initialZoom: 16.0, // Good zoom level for running
-          minZoom: 3.0,
-          maxZoom: 18.0,
-        ),
-        children: [
-          // Base map tiles
-          TileLayer(
-            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            userAgentPackageName: 'com.example.volt_running_tracker',
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      elevation: 2,
+      margin: EdgeInsets.zero,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: FlutterMap(
+          mapController: _mapController,
+          options: MapOptions(
+            initialCenter: center,
+            initialZoom: 16.0, // Good zoom level for running
+            minZoom: 3.0,
+            maxZoom: 18.0,
           ),
-
-          // Route polyline
-          if (routePoints.isNotEmpty)
-            PolylineLayer(
-              polylines: [
-                Polyline(
-                  points: routePoints,
-                  color: Colors.blue,
-                  strokeWidth: 4.0,
-                ),
-              ],
+          children: [
+            // Base map tiles
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.example.volt_running_tracker',
             ),
 
-          // Current position marker
-          if (routePoints.isNotEmpty)
-            MarkerLayer(
-              markers: [
-                Marker(
-                  point: routePoints.last,
-                  child: const Icon(
-                    Icons.my_location,
-                    color: Colors.red,
-                    size: 20,
+            // Route polyline
+            if (routePoints.isNotEmpty)
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: routePoints,
+                    color: Colors.blue,
+                    strokeWidth: 4.0,
                   ),
-                ),
-              ],
-            ),
-        ],
+                ],
+              ),
+
+            // Current position marker
+            if (routePoints.isNotEmpty)
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: routePoints.last,
+                    child: const Icon(
+                      Icons.my_location,
+                      color: Colors.red,
+                      size: 20,
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -293,7 +291,6 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
     final trackerState = ref.watch(trackerStateProvider);
     final metrics = ref.watch(currentMetricsProvider);
 
-    // FIXED: Properly detect if the timer has started
     final bool timerStarted =
         metrics['duration'] > 0 && trackerState == TrackerState.active;
 
@@ -318,20 +315,12 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
-        title: const Text('Run Tracker'),
+        title: const Text('Activity Tracker'),
         backgroundColor: Colors.black,
-        actions: [
-          // History button
-          IconButton(
-            icon: const Icon(Icons.history),
-            onPressed: _viewActivityHistory,
-            tooltip: 'Activity History',
-          ),
-        ],
       ),
       body: Stack(
         children: [
-          // Main content - IMPROVED LAYOUT WITH MAP
+          // Main content - improved layout with responsive sizing
           Column(
             children: [
               // Sensor status bar
@@ -343,7 +332,10 @@ class _RunTrackerScreenState extends ConsumerState<RunTrackerScreen>
               // Metrics grid - ~60% of available space
               SizedBox(
                 height: metricsGridHeight,
-                child: MetricsGrid(metrics: metrics),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: MetricsGrid(metrics: metrics),
+                ),
               ),
 
               // Small spacer

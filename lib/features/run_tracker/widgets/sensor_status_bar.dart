@@ -12,9 +12,8 @@ class SensorStatusBar extends ConsumerWidget {
     final sensors = ref.watch(sensorStatusProvider);
 
     return Container(
-      height: 50, // Reduced height to save vertical space
-      padding: const EdgeInsets.symmetric(
-          horizontal: 16.0, vertical: 4.0), // Reduced vertical padding
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -56,15 +55,13 @@ class SensorStatusBar extends ConsumerWidget {
     required IconData icon,
     required String label,
   }) {
-    // Using a simpler approach with a Row instead of Stack
     return Container(
-      width: 70, // Fixed width
-      height: 36, // Fixed height
+      width: 70,
+      height: 32,
       decoration: BoxDecoration(
         color:
             isConnected ? Colors.green.withAlpha(30) : Colors.red.withAlpha(30),
-        borderRadius:
-            BorderRadius.circular(18), // Rounded rectangle instead of circle
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isConnected ? Colors.green : Colors.red,
           width: 1.0,
@@ -78,16 +75,15 @@ class SensorStatusBar extends ConsumerWidget {
             ),
         ],
       ),
-      // Using a Row for horizontal layout (icon + text) instead of vertical
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
             icon,
             color: isConnected ? Colors.green : Colors.red,
-            size: 16.0, // Smaller icon size
+            size: 16.0,
           ),
-          const SizedBox(width: 4), // Small space between icon and text
+          const SizedBox(width: 4),
           Text(
             label,
             style: TextStyle(

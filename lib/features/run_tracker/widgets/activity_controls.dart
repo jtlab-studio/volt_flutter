@@ -25,9 +25,8 @@ class ActivityControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 70, // REDUCED from 100
-      padding: const EdgeInsets.symmetric(
-          horizontal: 24.0, vertical: 8.0), // REDUCED padding
+      height: 70,
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
       decoration: BoxDecoration(
         color: Colors.black,
         boxShadow: [
@@ -76,7 +75,7 @@ class ActivityControls extends StatelessWidget {
           icon: Icons.play_arrow,
           label: 'START',
           color: Colors.green,
-          size: 52.0, // REDUCED from 64
+          size: 52.0,
           isLoading: state == TrackerState.preparing,
         ),
       ],
@@ -93,7 +92,7 @@ class ActivityControls extends StatelessWidget {
           onPressed: onDiscard,
           icon: Icons.delete,
           color: Colors.red,
-          size: 36.0, // REDUCED from 48
+          size: 36.0,
           showBackground: false,
         ),
 
@@ -103,7 +102,7 @@ class ActivityControls extends StatelessWidget {
           icon: Icons.pause,
           label: 'PAUSE',
           color: Colors.orange,
-          size: 52.0, // REDUCED from 64
+          size: 52.0,
         ),
 
         // End button (small)
@@ -111,7 +110,7 @@ class ActivityControls extends StatelessWidget {
           onPressed: onStop,
           icon: Icons.stop,
           color: Colors.red,
-          size: 36.0, // REDUCED from 48
+          size: 36.0,
           showBackground: false,
         ),
       ],
@@ -129,7 +128,7 @@ class ActivityControls extends StatelessWidget {
           icon: Icons.delete,
           label: 'DISCARD',
           color: Colors.red,
-          size: 36.0, // REDUCED from 48
+          size: 36.0,
         ),
 
         // Resume button
@@ -138,7 +137,7 @@ class ActivityControls extends StatelessWidget {
           icon: Icons.play_arrow,
           label: 'RESUME',
           color: Colors.green,
-          size: 52.0, // REDUCED from 64
+          size: 52.0,
         ),
 
         // End button
@@ -147,7 +146,7 @@ class ActivityControls extends StatelessWidget {
           icon: Icons.stop,
           label: 'END',
           color: Colors.red,
-          size: 36.0, // REDUCED from 48
+          size: 36.0,
         ),
       ],
     );
@@ -164,13 +163,13 @@ class ActivityControls extends StatelessWidget {
           icon: Icons.refresh,
           label: 'RETRY',
           color: Colors.orange,
-          size: 52.0, // REDUCED from 64
+          size: 52.0,
         ),
       ],
     );
   }
 
-  // Helper to build control buttons - SIMPLIFIED
+  // Helper to build control buttons
   Widget _buildControlButton({
     required VoidCallback? onPressed,
     required IconData icon,
@@ -183,7 +182,6 @@ class ActivityControls extends StatelessWidget {
     // Disabled color
     final disabledColor = Colors.grey;
 
-    // Make a more compact button design
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -230,17 +228,17 @@ class ActivityControls extends StatelessWidget {
           ),
         ),
 
-        // Label - only if there's space
+        // Label
         if (label != null)
           Padding(
-            padding: const EdgeInsets.only(top: 2.0), // REDUCED from 8
+            padding: const EdgeInsets.only(top: 4.0),
             child: Text(
               label,
               style: TextStyle(
                 color: onPressed != null ? Colors.white : disabledColor,
-                fontSize: 9.0, // REDUCED from 12
+                fontSize: 10.0,
                 fontWeight: FontWeight.bold,
-                letterSpacing: 0.5, // REDUCED from 1.0
+                letterSpacing: 0.5,
               ),
             ),
           ),
