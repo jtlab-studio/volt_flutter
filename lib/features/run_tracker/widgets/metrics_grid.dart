@@ -30,16 +30,16 @@ class MetricsGrid extends StatelessWidget {
     final averageCadence = currentActivity?.averageCadence;
     final averagePace = currentActivity?.averagePaceSecondsPerKm;
 
-    return Column(
-      children: [
-        // Primary metrics row (time and distance)
-        SizedBox(
-          height: 80,
-          child: Row(
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // Primary metrics row (time and distance) - these are always visible
+          Row(
             children: [
               // Duration
               Expanded(
                 child: _buildPrimaryMetric(
+                  context: context,
                   label: 'TIME',
                   value: TrackerService.formatDuration(duration),
                   icon: Icons.timer,
@@ -50,6 +50,7 @@ class MetricsGrid extends StatelessWidget {
               // Distance
               Expanded(
                 child: _buildPrimaryMetric(
+                  context: context,
                   label: 'DISTANCE',
                   value: '${TrackerService.formatDistance(distance)} km',
                   icon: Icons.straighten,
@@ -58,87 +59,72 @@ class MetricsGrid extends StatelessWidget {
               ),
             ],
           ),
-        ),
 
-        const SizedBox(height: 8),
+          const SizedBox(height: 8),
 
-        // Secondary metrics
-        Expanded(
-          child: Row(
+          // Secondary metrics - arranged in a 2x2 grid with current and average values
+          Row(
             children: [
-              // Left column - Pace and Power
+              // Left column - Pace and Heart Rate
               Expanded(
                 child: Column(
                   children: [
                     // Pace
-                    Expanded(
-                      child: _buildMetricWithAvg(
-                        label: 'PACE',
-                        value: SensorReading.formatPace(pace),
-                        avgValue: averagePace != null
-                            ? SensorReading.formatPace(averagePace)
-                            : null,
-                        unit: 'min/km',
-                        icon: Icons.speed,
-                        iconColor: Colors.orange,
-                      ),
+                    _buildMetricWithAvg(
+                      label: 'PACE',
+                      currentValue: SensorReading.formatPace(pace),
+                      avgValue: SensorReading.formatPace(averagePace),
+                      unit: 'min/km',
+                      icon: Icons.speed,
+                      iconColor: Colors.orange,
                     ),
                     const SizedBox(height: 8),
-                    // Power
-                    Expanded(
-                      child: _buildMetricWithAvg(
-                        label: 'POWER',
-                        value: power?.toString() ?? '--',
-                        avgValue: averagePower?.toString(),
-                        unit: 'W',
-                        icon: Icons.bolt,
-                        iconColor: Colors.yellow,
-                      ),
+                    // Heart Rate
+                    _buildMetricWithAvg(
+                      label: 'HEART RATE',
+                      currentValue: heartRate?.toString() ?? '--',
+                      avgValue: averageHR?.toString(),
+                      unit: 'bpm',
+                      icon: Icons.favorite,
+                      iconColor: Colors.red,
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              // Right column - Heart Rate and Cadence
+              // Right column - Power and Cadence
               Expanded(
                 child: Column(
                   children: [
-                    // Heart Rate
-                    Expanded(
-                      child: _buildMetricWithAvg(
-                        label: 'HEART RATE',
-                        value: heartRate?.toString() ?? '--',
-                        avgValue: averageHR?.toString(),
-                        unit: 'bpm',
-                        icon: Icons.favorite,
-                        iconColor: Colors.red,
-                      ),
+                    // Power
+                    _buildMetricWithAvg(
+                      label: 'POWER',
+                      currentValue: power?.toString() ?? '--',
+                      avgValue: averagePower?.toString(),
+                      unit: 'W',
+                      icon: Icons.bolt,
+                      iconColor: Colors.yellow,
                     ),
                     const SizedBox(height: 8),
                     // Cadence
-                    Expanded(
-                      child: _buildMetricWithAvg(
-                        label: 'CADENCE',
-                        value: cadence?.toString() ?? '--',
-                        avgValue: averageCadence?.toString(),
-                        unit: 'spm',
-                        icon: Icons.directions_walk,
-                        iconColor: Colors.green,
-                      ),
+                    _buildMetricWithAvg(
+                      label: 'CADENCE',
+                      currentValue: cadence?.toString() ?? '--',
+                      avgValue: averageCadence?.toString(),
+                      unit: 'spm',
+                      icon: Icons.directions_walk,
+                      iconColor: Colors.green,
                     ),
                   ],
                 ),
               ),
             ],
           ),
-        ),
 
-        const SizedBox(height: 8),
+          const SizedBox(height: 8),
 
-        // Elevation
-        SizedBox(
-          height: 50,
-          child: Card(
+          // Elevation - at the bottom, with a different layout
+          Card(
             margin: EdgeInsets.zero,
             color: const Color(0xFF2C2C2C),
             shape: RoundedRectangleBorder(
@@ -146,7 +132,7 @@ class MetricsGrid extends StatelessWidget {
             ),
             elevation: 2,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -154,7 +140,7 @@ class MetricsGrid extends StatelessWidget {
                   const Text(
                     'ELEVATION',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 14,
                       color: Colors.grey,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.0,
@@ -235,13 +221,14 @@ class MetricsGrid extends StatelessWidget {
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  // Primary metric for time and distance
+  // Primary metrics (Time, Distance)
   Widget _buildPrimaryMetric({
+    required BuildContext context,
     required String label,
     required String value,
     required IconData icon,
@@ -257,7 +244,7 @@ class MetricsGrid extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.start,
           children: [
             Icon(
               icon,
@@ -266,7 +253,6 @@ class MetricsGrid extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Column(
-              mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -274,7 +260,7 @@ class MetricsGrid extends StatelessWidget {
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize: 24,
+                    fontSize: 20,
                   ),
                 ),
                 Text(
@@ -293,10 +279,10 @@ class MetricsGrid extends StatelessWidget {
     );
   }
 
-  // Metric with dedicated average value section
+  // Secondary metrics with both current and average values (Pace, HR, Power, Cadence)
   Widget _buildMetricWithAvg({
     required String label,
-    required String value,
+    required String currentValue,
     String? avgValue,
     required String unit,
     required IconData icon,
@@ -310,7 +296,7 @@ class MetricsGrid extends StatelessWidget {
       ),
       elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -321,7 +307,7 @@ class MetricsGrid extends StatelessWidget {
                 Text(
                   label,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: Colors.grey[400],
                     fontWeight: FontWeight.bold,
                   ),
@@ -334,40 +320,39 @@ class MetricsGrid extends StatelessWidget {
               ],
             ),
 
-            // Current value takes most space
-            Expanded(
-              flex: 3,
-              child: Center(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      value,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      ' $unit',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[500],
-                      ),
-                    ),
-                  ],
+            const SizedBox(height: 4),
+
+            // Current value row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  currentValue,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
+                const SizedBox(width: 4),
+                Text(
+                  unit,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[500],
+                  ),
+                ),
+              ],
             ),
 
             // Average section
             if (avgValue != null)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 4),
+                margin: const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.only(top: 4),
                 decoration: BoxDecoration(
                   border: Border(
                     top: BorderSide(
@@ -376,21 +361,21 @@ class MetricsGrid extends StatelessWidget {
                     ),
                   ),
                 ),
-                child: Column(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'AVERAGE',
+                      'AVG',
                       style: TextStyle(
-                        fontSize: 9,
+                        fontSize: 10,
                         color: Colors.grey[500],
                         fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
                       ),
                     ),
                     Text(
                       '$avgValue $unit',
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 12,
                         color: Colors.grey[300],
                         fontWeight: FontWeight.bold,
                       ),

@@ -34,7 +34,7 @@ class _ActivityTrackerScreenState extends ConsumerState<ActivityTrackerScreen>
 
   // Custom metrics for the map view
   String _leftMetric = 'pace';
-  String _rightMetric = 'heartRate';
+  String _rightMetric = 'distance';
 
   @override
   void initState() {
@@ -223,7 +223,7 @@ class _ActivityTrackerScreenState extends ConsumerState<ActivityTrackerScreen>
     }
   }
 
-  // Build the map section
+  // Build the map view tab
   Widget _buildMapView() {
     final currentActivity = ref.watch(currentActivityProvider);
     final metrics = ref.watch(currentMetricsProvider);
@@ -245,99 +245,31 @@ class _ActivityTrackerScreenState extends ConsumerState<ActivityTrackerScreen>
 
     return Column(
       children: [
+        // Sensor status bar
+        const SensorStatusBar(),
+
         // Top metrics display (customizable)
-        SizedBox(
-          height: 80,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Row(
-              children: [
-                // Left metric
-                Expanded(
-                  child: Card(
-                    margin: EdgeInsets.zero,
-                    color: const Color(0xFF2C2C2C),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Metric label
-                          Text(
-                            _getMetricLabel(_leftMetric),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[400],
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          // Metric value
-                          Text(
-                            _formatMetricValue(_leftMetric, metrics),
-                            style: const TextStyle(
-                              fontSize: 20,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Right metric
-                Expanded(
-                  child: Card(
-                    margin: EdgeInsets.zero,
-                    color: const Color(0xFF2C2C2C),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Metric label
-                          Text(
-                            _getMetricLabel(_rightMetric),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[400],
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          // Metric value
-                          Text(
-                            _formatMetricValue(_rightMetric, metrics),
-                            style: const TextStyle(
-                              fontSize: 20,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+        Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            children: [
+              // Left metric
+              Expanded(
+                child: _buildMapMetricCard(_leftMetric, metrics, true),
+              ),
+              const SizedBox(width: 12),
+              // Right metric
+              Expanded(
+                child: _buildMapMetricCard(_rightMetric, metrics, false),
+              ),
+            ],
           ),
         ),
 
         // Map view (takes remaining space)
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.symmetric(horizontal: 12.0),
             child: Card(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -394,7 +326,113 @@ class _ActivityTrackerScreenState extends ConsumerState<ActivityTrackerScreen>
             ),
           ),
         ),
+
+        // Space for the controls
+        const SizedBox(height: 70),
       ],
+    );
+  }
+
+  // Build a metric card for the map view
+  Widget _buildMapMetricCard(
+      String metricKey, Map<String, dynamic> metrics, bool isLeft) {
+    return InkWell(
+      onTap: () => _showMetricPicker(isLeft),
+      borderRadius: BorderRadius.circular(12),
+      child: Card(
+        margin: EdgeInsets.zero,
+        color: const Color(0xFF2C2C2C),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        elevation: 2,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Metric label
+              Text(
+                _getMetricLabel(metricKey),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[400],
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              // Metric value
+              Text(
+                _formatMetricValue(metricKey, metrics),
+                style: const TextStyle(
+                  fontSize: 20,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              // Hint
+              Text(
+                'Tap to change',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Show a dialog to pick a metric for display
+  void _showMetricPicker(bool isLeft) {
+    final availableMetrics = [
+      'pace',
+      'heartRate',
+      'power',
+      'cadence',
+      'distance',
+      'duration',
+      'elevationGain',
+      'elevationLoss',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Select ${isLeft ? 'Left' : 'Right'} Metric'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: availableMetrics.length,
+            itemBuilder: (context, index) {
+              final metric = availableMetrics[index];
+              return ListTile(
+                title: Text(_getMetricLabel(metric)),
+                onTap: () {
+                  setState(() {
+                    if (isLeft) {
+                      _leftMetric = metric;
+                    } else {
+                      _rightMetric = metric;
+                    }
+                  });
+                  Navigator.pop(context);
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -504,21 +542,18 @@ class _ActivityTrackerScreenState extends ConsumerState<ActivityTrackerScreen>
               Column(
                 children: [
                   // Sensor status bar
-                  const SizedBox(
-                    height: 40,
-                    child: SensorStatusBar(),
-                  ),
+                  const SensorStatusBar(),
 
                   // Metrics grid
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      padding: const EdgeInsets.all(12.0),
                       child: MetricsGrid(metrics: metrics),
                     ),
                   ),
 
-                  // Activity controls - Will be handled by the Stack
-                  SizedBox(height: 78), // Space for controls
+                  // Space for controls
+                  const SizedBox(height: 70),
                 ],
               ),
 
@@ -532,17 +567,14 @@ class _ActivityTrackerScreenState extends ConsumerState<ActivityTrackerScreen>
             left: 0,
             right: 0,
             bottom: 0,
-            child: SizedBox(
-              height: 78,
-              child: ActivityControls(
-                state: trackerState,
-                timerStarted: timerStarted,
-                onStart: _startActivity,
-                onPause: _pauseActivity,
-                onResume: _resumeActivity,
-                onStop: _endActivity,
-                onDiscard: _discardActivity,
-              ),
+            child: ActivityControls(
+              state: trackerState,
+              timerStarted: timerStarted,
+              onStart: _startActivity,
+              onPause: _pauseActivity,
+              onResume: _resumeActivity,
+              onStop: _endActivity,
+              onDiscard: _discardActivity,
             ),
           ),
 
