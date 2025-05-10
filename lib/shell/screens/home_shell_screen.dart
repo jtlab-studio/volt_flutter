@@ -1,14 +1,17 @@
-// Updated import for the enhanced sensors screen
+// lib/shell/screens/home_shell_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/menu_item_data.dart';
 import '../widgets/vertical_carousel_menu.dart';
 import '../../core/constants/app_constants.dart';
 import '../../features/sensors/screens/sensors_screen.dart';
-import '../../features/sensors/screens/gps_hub_screen.dart'; // Added GPS Hub import
+import '../../features/sensors/screens/gps_hub_screen.dart';
 import '../../features/run_tracker/screens/activity_tracker_screen.dart';
+import '../../features/run_tracker/screens/activity_map_screen.dart';
+import '../../features/run_tracker/screens/activity_history_screen.dart';
 import '../../features/academy/screens/academy_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
+import '../../features/profile/screens/user_profile_screen.dart'; // Import the user profile screen
 import '../../features/race_prep/screens/race_prep_screen.dart';
 import '../../features/route_finder/screens/route_finder_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
@@ -86,9 +89,7 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
       case 'sensors':
         Navigator.push(
           context,
-          MaterialPageRoute(
-              builder: (context) =>
-                  const SensorsScreen()), // Updated to use enhanced screen
+          MaterialPageRoute(builder: (context) => const SensorsScreen()),
         );
         break;
       case 'gps_hub':
@@ -98,11 +99,8 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
         );
         break;
       case 'run':
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (context) => const ActivityTrackerScreen()),
-        );
+        // Show a selection dialog for different activity tracker options
+        _showRunTrackerOptions();
         break;
       case 'routes':
         Navigator.push(
@@ -123,10 +121,7 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
         );
         break;
       case 'profile':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const ProfileScreen()),
-        );
+        _showProfileOptions();
         break;
       case 'settings':
         Navigator.push(
@@ -135,6 +130,171 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
         );
         break;
     }
+  }
+
+  // Show run tracker options dialog
+  void _showRunTrackerOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF2C2C2C),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+      ),
+      builder: (context) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16.0),
+              child: Text(
+                'Activity Tracker',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+            ),
+            const Divider(color: Colors.grey),
+            // Activity Tracker option
+            ListTile(
+              leading: const Icon(Icons.directions_run, color: Colors.blue),
+              title: const Text(
+                'New Activity',
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                'Start a new running activity',
+                style: TextStyle(color: Colors.grey),
+              ),
+              onTap: () {
+                Navigator.pop(context); // Close the modal
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ActivityTrackerScreen(),
+                  ),
+                );
+              },
+            ),
+            // Activity History option
+            ListTile(
+              leading: const Icon(Icons.history, color: Colors.orange),
+              title: const Text(
+                'Activity History',
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                'View your past activities',
+                style: TextStyle(color: Colors.grey),
+              ),
+              onTap: () {
+                Navigator.pop(context); // Close the modal
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ActivityHistoryScreen(),
+                  ),
+                );
+              },
+            ),
+            // Map View option
+            ListTile(
+              leading: const Icon(Icons.map, color: Colors.green),
+              title: const Text(
+                'Activity Map',
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                'View route on a map',
+                style: TextStyle(color: Colors.grey),
+              ),
+              onTap: () {
+                Navigator.pop(context); // Close the modal
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ActivityMapScreen(),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
+        );
+      },
+    );
+  }
+
+  // Show profile options dialog
+  void _showProfileOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF2C2C2C),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+      ),
+      builder: (context) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16.0),
+              child: Text(
+                'Profile Options',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+            ),
+            const Divider(color: Colors.grey),
+            // Regular profile
+            ListTile(
+              leading: const Icon(Icons.person, color: Colors.indigo),
+              title: const Text(
+                'Profile Overview',
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                'View your general profile',
+                style: TextStyle(color: Colors.grey),
+              ),
+              onTap: () {
+                Navigator.pop(context); // Close the modal
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ProfileScreen(),
+                  ),
+                );
+              },
+            ),
+            // User profile (for run settings)
+            ListTile(
+              leading: const Icon(Icons.fitness_center, color: Colors.blue),
+              title: const Text(
+                'Runner Profile',
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                'Configure your running metrics',
+                style: TextStyle(color: Colors.grey),
+              ),
+              onTap: () {
+                Navigator.pop(context); // Close the modal
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const UserProfileScreen(),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
+        );
+      },
+    );
   }
 
   void _showModuleMessage(String moduleName) {
@@ -161,6 +321,13 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
           break;
         case 2:
           tabName = 'History';
+          // Navigate to activity history when the History tab is selected
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ActivityHistoryScreen(),
+            ),
+          );
           break;
         case 3:
           tabName = 'Support';
@@ -259,6 +426,12 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _navigateToModule('run'),
+        backgroundColor: Colors.blue,
+        tooltip: 'Start Running',
+        child: const Icon(Icons.directions_run),
+      ),
     );
   }
 
@@ -329,7 +502,26 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
                   color: Colors.blue,
                   onTap: () {
                     Navigator.pop(context);
-                    _navigateToModule('run');
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ActivityTrackerScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _buildQuickActionButton(
+                  icon: Icons.history,
+                  label: 'Activity History',
+                  color: Colors.orange,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ActivityHistoryScreen(),
+                      ),
+                    );
                   },
                 ),
                 _buildQuickActionButton(
@@ -348,15 +540,6 @@ class _HomeShellScreenState extends ConsumerState<HomeShellScreen> {
                   onTap: () {
                     Navigator.pop(context);
                     _navigateToModule('sensors');
-                  },
-                ),
-                _buildQuickActionButton(
-                  icon: Icons.settings,
-                  label: 'Settings',
-                  color: Colors.blueGrey,
-                  onTap: () {
-                    Navigator.pop(context);
-                    _navigateToModule('settings');
                   },
                 ),
               ],

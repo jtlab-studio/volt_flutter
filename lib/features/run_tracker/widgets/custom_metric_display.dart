@@ -131,28 +131,4 @@ class CustomMetricDisplay extends StatelessWidget {
         return '--';
     }
   }
-
-  /// Get the icon for the metric
-  IconData _getMetricIcon() {
-    switch (metricKey) {
-      case 'pace':
-        return Icons.speed;
-      case 'heartRate':
-        return Icons.favorite;
-      case 'power':
-        return Icons.bolt;
-      case 'cadence':
-        return Icons.directions_walk;
-      case 'distance':
-        return Icons.straighten;
-      case 'duration':
-        return Icons.timer;
-      case 'elevationGain':
-        return Icons.arrow_upward;
-      case 'elevationLoss':
-        return Icons.arrow_downward;
-      default:
-        return Icons.show_chart;
-    }
-  }
 }

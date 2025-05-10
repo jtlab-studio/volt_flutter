@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../providers/tracker_providers.dart';
-import '../models/activity.dart';
 import '../widgets/custom_metric_display.dart';
 
 /// Screen 2 of the activity tracker showing a map with route and customizable metrics

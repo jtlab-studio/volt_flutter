@@ -21,7 +21,7 @@ class ActivityTrackerScreen extends ConsumerStatefulWidget {
 }
 
 class _ActivityTrackerScreenState extends ConsumerState<ActivityTrackerScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   // Flag to show modal when initializing
   bool _isInitializing = true;
   bool _buttonPressed = false;
@@ -29,10 +29,20 @@ class _ActivityTrackerScreenState extends ConsumerState<ActivityTrackerScreen>
   // Map controller to control zoom and centering
   final MapController _mapController = MapController();
 
+  // Tab controller for switching between metrics and map
+  late TabController _tabController;
+
+  // Custom metrics for the map view
+  String _leftMetric = 'pace';
+  String _rightMetric = 'heartRate';
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // Initialize tab controller for the two screens
+    _tabController = TabController(length: 2, vsync: this);
 
     // Automatically connect to sensors as soon as the screen is opened
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -69,6 +79,7 @@ class _ActivityTrackerScreenState extends ConsumerState<ActivityTrackerScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -213,8 +224,9 @@ class _ActivityTrackerScreenState extends ConsumerState<ActivityTrackerScreen>
   }
 
   // Build the map section
-  Widget _buildMapSection() {
+  Widget _buildMapView() {
     final currentActivity = ref.watch(currentActivityProvider);
+    final metrics = ref.watch(currentMetricsProvider);
     final routePoints = currentActivity?.routePoints ?? [];
 
     // Default center point if no GPS data
@@ -231,59 +243,225 @@ class _ActivityTrackerScreenState extends ConsumerState<ActivityTrackerScreen>
       });
     }
 
-    return Card(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      elevation: 2,
-      margin: EdgeInsets.zero,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: FlutterMap(
-          mapController: _mapController,
-          options: MapOptions(
-            initialCenter: center,
-            initialZoom: 16.0, // Good zoom level for running
-            minZoom: 3.0,
-            maxZoom: 18.0,
-          ),
-          children: [
-            // Base map tiles
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.example.volt_running_tracker',
-            ),
-
-            // Route polyline
-            if (routePoints.isNotEmpty)
-              PolylineLayer(
-                polylines: [
-                  Polyline(
-                    points: routePoints,
-                    color: Colors.blue,
-                    strokeWidth: 4.0,
-                  ),
-                ],
-              ),
-
-            // Current position marker
-            if (routePoints.isNotEmpty)
-              MarkerLayer(
-                markers: [
-                  Marker(
-                    point: routePoints.last,
-                    child: const Icon(
-                      Icons.my_location,
-                      color: Colors.red,
-                      size: 20,
+    return Column(
+      children: [
+        // Top metrics display (customizable)
+        SizedBox(
+          height: 80,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Row(
+              children: [
+                // Left metric
+                Expanded(
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    color: const Color(0xFF2C2C2C),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Metric label
+                          Text(
+                            _getMetricLabel(_leftMetric),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[400],
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          // Metric value
+                          Text(
+                            _formatMetricValue(_leftMetric, metrics),
+                            style: const TextStyle(
+                              fontSize: 20,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ],
-              ),
-          ],
+                ),
+                const SizedBox(width: 8),
+                // Right metric
+                Expanded(
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    color: const Color(0xFF2C2C2C),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Metric label
+                          Text(
+                            _getMetricLabel(_rightMetric),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[400],
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          // Metric value
+                          Text(
+                            _formatMetricValue(_rightMetric, metrics),
+                            style: const TextStyle(
+                              fontSize: 20,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-      ),
+
+        // Map view (takes remaining space)
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Card(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 2,
+              margin: EdgeInsets.zero,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: center,
+                    initialZoom: 16.0, // Good zoom level for running
+                    minZoom: 3.0,
+                    maxZoom: 18.0,
+                  ),
+                  children: [
+                    // Base map tiles
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.volt_running_tracker',
+                    ),
+
+                    // Route polyline
+                    if (routePoints.isNotEmpty)
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: routePoints,
+                            color: Colors.blue,
+                            strokeWidth: 4.0,
+                          ),
+                        ],
+                      ),
+
+                    // Current position marker
+                    if (routePoints.isNotEmpty)
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: routePoints.last,
+                            child: const Icon(
+                              Icons.my_location,
+                              color: Colors.red,
+                              size: 20,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
+  }
+
+  // Get the display label for a metric key
+  String _getMetricLabel(String metricKey) {
+    switch (metricKey) {
+      case 'pace':
+        return 'PACE';
+      case 'heartRate':
+        return 'HEART RATE';
+      case 'power':
+        return 'POWER';
+      case 'cadence':
+        return 'CADENCE';
+      case 'distance':
+        return 'DISTANCE';
+      case 'duration':
+        return 'TIME';
+      case 'elevationGain':
+        return 'ELEV. GAIN';
+      case 'elevationLoss':
+        return 'ELEV. LOSS';
+      default:
+        return metricKey.toUpperCase();
+    }
+  }
+
+  // Format the metric value based on its type
+  String _formatMetricValue(String metricKey, Map<String, dynamic> metrics) {
+    switch (metricKey) {
+      case 'pace':
+        final pace = metrics['pace'] as int?;
+        return pace != null
+            ? '${pace ~/ 60}:${(pace % 60).toString().padLeft(2, '0')}'
+            : '--:--';
+
+      case 'heartRate':
+        final heartRate = metrics['heartRate'] as int?;
+        return heartRate != null ? '$heartRate bpm' : '--';
+
+      case 'power':
+        final power = metrics['power'] as int?;
+        return power != null ? '$power W' : '--';
+
+      case 'cadence':
+        final cadence = metrics['cadence'] as int?;
+        return cadence != null ? '$cadence spm' : '--';
+
+      case 'distance':
+        final distance = metrics['distance'] as double;
+        return '${TrackerService.formatDistance(distance)} km';
+
+      case 'duration':
+        final duration = metrics['duration'] as int;
+        return TrackerService.formatDuration(duration);
+
+      case 'elevationGain':
+        final elevationGain = metrics['elevationGain'] as double;
+        return '${elevationGain.toStringAsFixed(0)} m';
+
+      case 'elevationLoss':
+        final elevationLoss = metrics['elevationLoss'] as double;
+        return '${elevationLoss.toStringAsFixed(0)} m';
+
+      default:
+        return '--';
+    }
   }
 
   @override
@@ -294,82 +472,78 @@ class _ActivityTrackerScreenState extends ConsumerState<ActivityTrackerScreen>
     final bool timerStarted =
         metrics['duration'] > 0 && trackerState == TrackerState.active;
 
-    // Calculate available height between app bar and bottom
-    final screenHeight = MediaQuery.of(context).size.height;
-    final appBarHeight = kToolbarHeight;
-    final bottomNavHeight = 70.0; // Activity controls height
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-    final sensorBarHeight = 40.0;
-
-    // Calculate space available for content
-    final availableHeight = screenHeight -
-        appBarHeight -
-        bottomNavHeight -
-        bottomPadding -
-        sensorBarHeight;
-
-    // Allocate ~60% to metrics grid, rest to map
-    final metricsGridHeight = availableHeight * 0.6;
-    final mapHeight = availableHeight * 0.4;
-
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
         title: const Text('Activity Tracker'),
         backgroundColor: Colors.black,
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(
+              icon: Icon(Icons.data_usage),
+              text: 'Metrics',
+            ),
+            Tab(
+              icon: Icon(Icons.map),
+              text: 'Map',
+            ),
+          ],
+          indicatorColor: Colors.blue,
+          labelColor: Colors.blue,
+          unselectedLabelColor: Colors.grey,
+        ),
       ),
       body: Stack(
         children: [
-          // Main content - improved layout with responsive sizing
-          Column(
+          // Main content - TabBarView for switching between metrics and map
+          TabBarView(
+            controller: _tabController,
             children: [
-              // Sensor status bar
-              const SizedBox(
-                height: 40,
-                child: SensorStatusBar(),
+              // First tab - Metrics Grid
+              Column(
+                children: [
+                  // Sensor status bar
+                  const SizedBox(
+                    height: 40,
+                    child: SensorStatusBar(),
+                  ),
+
+                  // Metrics grid
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: MetricsGrid(metrics: metrics),
+                    ),
+                  ),
+
+                  // Activity controls - Will be handled by the Stack
+                  SizedBox(height: 78), // Space for controls
+                ],
               ),
 
-              // Metrics grid - ~60% of available space
-              SizedBox(
-                height: metricsGridHeight,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  child: MetricsGrid(metrics: metrics),
-                ),
-              ),
-
-              // Small spacer
-              const SizedBox(height: 8),
-
-              // Map section - ~40% of available space
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: SizedBox(
-                  height: mapHeight,
-                  child: _buildMapSection(),
-                ),
-              ),
-
-              // Small spacer
-              const SizedBox(height: 8),
-
-              // Activity controls at the bottom
-              SizedBox(
-                height: 70,
-                child: ActivityControls(
-                  state: trackerState,
-                  timerStarted: timerStarted,
-                  onStart: _startActivity,
-                  onPause: _pauseActivity,
-                  onResume: _resumeActivity,
-                  onStop: _endActivity,
-                  onDiscard: _discardActivity,
-                ),
-              ),
-
-              // Space for bottom system UI
-              SizedBox(height: MediaQuery.of(context).padding.bottom),
+              // Second tab - Map View
+              _buildMapView(),
             ],
+          ),
+
+          // Activity controls fixed at the bottom
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SizedBox(
+              height: 78,
+              child: ActivityControls(
+                state: trackerState,
+                timerStarted: timerStarted,
+                onStart: _startActivity,
+                onPause: _pauseActivity,
+                onResume: _resumeActivity,
+                onStop: _endActivity,
+                onDiscard: _discardActivity,
+              ),
+            ),
           ),
 
           // Loading overlay
